@@ -111,7 +111,7 @@ function getSessionCount() {
 function getEnv(s) { return s?.env || {}; }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escJ(s) { return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e'); }
+function escJ(s) { return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/`/g,'\\u0060').replace(/\$/g,'\\u0024'); }
 
 // ── BUILD ──
 
@@ -124,11 +124,46 @@ function gen() {
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
 
   const D = {};
-  skills.forEach(s => { D['s:'+s.name] = { t: s.name, tp: 'SKILL MODULE', m: (s.ver?'v'+s.ver:'')+(s.ctx?' // '+s.ctx:''), b: s.body }; });
-  agents.forEach(a => { D['a:'+a.name] = { t: a.name, tp: 'AGENT DEFINITION', m: '', b: a.body }; });
-  mcp.forEach(s => { D['m:'+s.name] = { t: s.name, tp: 'MCP SERVER CONFIG', m: s.cmd+' '+s.args.join(' '), b: JSON.stringify(s.config,null,2) }; });
-  hooks.forEach((h,i) => { D['h:'+i] = { t: h.ev+' // '+h.matcher, tp: 'HOOK INTERCEPT', m: 'TYPE: '+h.type+(h.async?' // ASYNC':''), b: JSON.stringify(h.full,null,2) }; });
-  mem.forEach(m => { D['e:'+m.file] = { t: m.name, tp: 'MEMORY FILE // '+m.type.toUpperCase(), m: m.proj, b: m.body }; });
+  skills.forEach(s => {
+    const skillPath = path.join(CLAUDE_DIR, 'skills', s.name, 'SKILL.md');
+    D['s:'+s.name] = { t: s.name, tp: 'SKILL MODULE', m: (s.ver?'v'+s.ver:'')+(s.ctx?' // '+s.ctx:''), b: s.body,
+      actions: [
+        { label: 'INVOKE', cmd: '/'+s.name, icon: 'RUN' },
+        { label: 'OPEN FILE', cmd: 'open '+skillPath, icon: 'EDIT' },
+        { label: 'COPY PATH', cmd: skillPath, icon: 'PATH' },
+      ]};
+  });
+  agents.forEach(a => {
+    const agentPath = path.join(CLAUDE_DIR, 'agents', a.name+'.md');
+    D['a:'+a.name] = { t: a.name, tp: 'AGENT DEFINITION', m: '', b: a.body,
+      actions: [
+        { label: 'OPEN FILE', cmd: 'open '+agentPath, icon: 'EDIT' },
+        { label: 'COPY PATH', cmd: agentPath, icon: 'PATH' },
+      ]};
+  });
+  mcp.forEach(s => {
+    D['m:'+s.name] = { t: s.name, tp: 'MCP SERVER CONFIG', m: s.cmd+' '+s.args.join(' '), b: JSON.stringify(s.config,null,2),
+      actions: [
+        { label: 'COPY CONFIG', cmd: JSON.stringify(s.config,null,2), icon: 'COPY' },
+        { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+      ]};
+  });
+  hooks.forEach((h,i) => {
+    D['h:'+i] = { t: h.ev+' // '+h.matcher, tp: 'HOOK INTERCEPT', m: 'TYPE: '+h.type+(h.async?' // ASYNC':''), b: JSON.stringify(h.full,null,2),
+      actions: [
+        { label: 'COPY HOOK JSON', cmd: JSON.stringify(h.full,null,2), icon: 'COPY' },
+        { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+      ]};
+  });
+  mem.forEach(m => {
+    const memPath = path.join(CLAUDE_DIR, 'projects', m.proj.replace(/\//g,'-'), 'memory', m.file);
+    D['e:'+m.file] = { t: m.name, tp: 'MEMORY FILE // '+m.type.toUpperCase(), m: m.proj, b: m.body,
+      actions: [
+        { label: 'OPEN FILE', cmd: 'open '+memPath, icon: 'EDIT' },
+        { label: 'COPY PATH', cmd: memPath, icon: 'PATH' },
+        { label: 'DELETE', cmd: 'rm '+memPath, icon: 'DEL' },
+      ]};
+  });
 
   const sections = [
     { id: 'skills', label: 'SKILLS', color: '#9999FF', count: skills.length },
@@ -306,6 +341,34 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .dp-b td{padding:6px 8px;border-bottom:1px solid #1a1a1e}
 .dp-b blockquote{border-left:3px solid var(--tan);padding-left:14px;color:var(--dim);margin:10px 0}
 
+/* ═══ ACTION BAR ═══ */
+.dp-actions{display:flex;gap:4px;padding:12px 20px;border-bottom:1px solid #1a1a1e;background:#060608;flex-wrap:wrap}
+.act-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border:none;cursor:pointer;
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:500;
+  letter-spacing:0.08em;text-transform:uppercase;color:var(--bg);
+  border-radius:14px;transition:filter 0.12s;
+}
+.act-btn:hover{filter:brightness(1.3)}
+.act-btn[data-icon=RUN]{background:var(--green)}
+.act-btn[data-icon=EDIT]{background:var(--orange)}
+.act-btn[data-icon=PATH]{background:var(--blue)}
+.act-btn[data-icon=COPY]{background:var(--cyan)}
+.act-btn[data-icon=DEL]{background:var(--red)}
+
+/* ═══ TOAST ═══ */
+.toast{
+  position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--orange);color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.9rem;font-weight:600;
+  letter-spacing:0.1em;text-transform:uppercase;
+  padding:10px 28px;border-radius:20px;
+  opacity:0;transition:opacity 0.2s,transform 0.2s;
+  pointer-events:none;z-index:9999;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
 /* ═══ BOTTOM BAR ═══ */
 .bb{grid-column:2;display:flex;gap:4px}
 .bb-elbow{width:72px;background:var(--lavender);border-radius:48px 0 0 0;flex-shrink:0}
@@ -432,6 +495,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         <div class="dp-t" id="dp-t"></div>
         <div class="dp-m" id="dp-m"></div>
       </div>
+      <div class="dp-actions" id="dp-actions"></div>
       <div class="dp-b" id="dp-b"></div>
     </div>
   </div>
@@ -444,6 +508,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 const D=${escJ(D)};
@@ -457,14 +522,27 @@ function nav(id,el){
 }
 
 function open_(k){
-  const d=D[k];if(!d)return;
+  var d=D[k];if(!d)return;
   document.getElementById('dp-tp').textContent=d.tp;
   document.getElementById('dp-t').textContent=d.t;
   document.getElementById('dp-m').textContent=d.m;
   document.getElementById('dp-b').innerHTML=md(d.b);
+
+  // Render action buttons
+  var ab=document.getElementById('dp-actions');
+  if(d.actions&&d.actions.length){
+    ab.style.display='flex';
+    ab.innerHTML=d.actions.map(function(a){
+      return '<button class="act-btn" data-icon="'+a.icon+'" onclick="doAction(this)" data-cmd="'+esc(a.cmd)+'">'+a.label+'</button>';
+    }).join('');
+  } else {
+    ab.style.display='none';
+    ab.innerHTML='';
+  }
+
   document.getElementById('mc').classList.add('open');
-  document.querySelectorAll('.r.sel').forEach(r=>r.classList.remove('sel'));
-  const row=document.querySelector('[data-k="'+k+'"]');
+  document.querySelectorAll('.r.sel').forEach(function(r){r.classList.remove('sel')});
+  var row=document.querySelector('[data-k="'+k+'"]');
   if(row)row.classList.add('sel');
 }
 
@@ -473,35 +551,62 @@ function close_(){
   document.querySelectorAll('.r.sel').forEach(r=>r.classList.remove('sel'));
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape')close_()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close_()});
+
+function doAction(btn){
+  var cmd=btn.getAttribute('data-cmd');
+  var icon=btn.getAttribute('data-icon');
+  if(icon==='RUN'||icon==='EDIT'){
+    // Copy as a command to run
+    navigator.clipboard.writeText(cmd).then(function(){
+      toast('Copied: '+cmd.slice(0,60));
+    });
+  } else if(icon==='DEL'){
+    // Confirm before copying delete command
+    if(confirm('Copy delete command to clipboard?\\n'+cmd)){
+      navigator.clipboard.writeText(cmd).then(function(){
+        toast('Copied delete command');
+      });
+    }
+  } else {
+    navigator.clipboard.writeText(cmd).then(function(){
+      toast('Copied to clipboard');
+    });
+  }
+}
+
+function toast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer=setTimeout(function(){t.classList.remove('show')},2000);
+}
 
 function hlJson(s) {
-  // Syntax highlight JSON
-  return s
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"\s*:/g, '<span class="key">"$1"</span>:')
-    .replace(/"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"/g, '<span class="str">"$1"</span>')
-    .replace(/\b(true|false)\b/g, '<span class="bool">$1</span>')
-    .replace(/\b(null)\b/g, '<span class="kw">$1</span>')
-    .replace(/\b(-?\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+  var h = s.replace(/&/g,'&amp;').replace(new RegExp('<','g'),'&lt;').replace(new RegExp('>','g'),'&gt;');
+  h = h.replace(new RegExp('"([^"]*)"\\\\s*:','g'), '<span class="key">"$1"</span>:');
+  h = h.replace(new RegExp('"([^"]*)"','g'), '<span class="str">"$1"</span>');
+  h = h.replace(new RegExp('\\\\b(true|false)\\\\b','g'), '<span class="bool">$1</span>');
+  h = h.replace(new RegExp('\\\\b(null)\\\\b','g'), '<span class="kw">$1</span>');
+  h = h.replace(new RegExp('\\\\b(-?\\\\d+\\\\.?\\\\d*)\\\\b','g'), '<span class="num">$1</span>');
+  return h;
 }
 
 function hlCode(s, lang) {
-  let h = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var h = s.replace(/&/g,'&amp;').replace(new RegExp('<','g'),'&lt;').replace(new RegExp('>','g'),'&gt;');
   if (lang === 'json' || lang === '') {
-    // Try JSON highlight if it looks like JSON
     if (h.trimStart().startsWith('{') || h.trimStart().startsWith('[')) {
       return hlJson(s);
     }
   }
-  // Generic: highlight strings, comments, numbers, common keywords
-  h = h.replace(/(\/\/.*$)/gm, '<span class="cmt">$1</span>');
-  h = h.replace(/(#.*$)/gm, '<span class="cmt">$1</span>');
-  h = h.replace(/"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"/g, '<span class="str">"$1"</span>');
-  h = h.replace(/'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'/g, "<span class='str'>'$1'</span>");
-  h = h.replace(/\b(function|const|let|var|return|if|else|for|while|import|export|from|async|await|class|new|this|type|interface)\b/g, '<span class="kw">$1</span>');
-  h = h.replace(/\b(true|false|null|undefined|nil)\b/g, '<span class="bool">$1</span>');
-  h = h.replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+  h = h.replace(new RegExp('(\\\\/\\\\/.*$)','gm'), '<span class="cmt">$1</span>');
+  h = h.replace(new RegExp('(#.*$)','gm'), '<span class="cmt">$1</span>');
+  h = h.replace(new RegExp('"([^"]*)"','g'), '<span class="str">"$1"</span>');
+  h = h.replace(new RegExp("'([^']*)'","g"), "<span class='str'>'$1'</span>");
+  h = h.replace(new RegExp('\\\\b(function|const|let|var|return|if|else|for|while|import|export|from|async|await|class|new|this|type|interface)\\\\b','g'), '<span class="kw">$1</span>');
+  h = h.replace(new RegExp('\\\\b(true|false|null|undefined|nil)\\\\b','g'), '<span class="bool">$1</span>');
+  h = h.replace(new RegExp('\\\\b(\\\\d+\\\\.?\\\\d*)\\\\b','g'), '<span class="num">$1</span>');
   return h;
 }
 
@@ -522,49 +627,50 @@ function md(t) {
   const codeBlocks = [];
 
   // Extract fenced code blocks first to protect them
-  const fenceRx = new RegExp('\x60\x60\x60(\\w*)\\n([\\s\\S]*?)\x60\x60\x60', 'g');
+  const BT = String.fromCharCode(96);
+  const fenceRx = new RegExp(BT+BT+BT+'(\\\\w*)\\\\n([\\\\s\\\\S]*?)'+BT+BT+BT, 'g');
   h = h.replace(fenceRx, (_, lang, code) => {
     const idx = codeBlocks.length;
-    const highlighted = hlCode(code.replace(/\n$/, ''), lang || '');
+    const highlighted = hlCode(code.replace(new RegExp('\\\\n$'), ''), lang || '');
     codeBlocks.push('<pre data-lang="' + (lang || 'code') + '"><code>' + highlighted + '</code></pre>');
     return '%%CODEBLOCK' + idx + '%%';
   });
 
   // Inline code
-  const inlineRx = new RegExp('\x60([^\x60]+)\x60', 'g');
+  const inlineRx = new RegExp(BT+'([^'+BT+']+)'+BT, 'g');
   h = h.replace(inlineRx, '<code>$1</code>');
 
   // Headers
-  h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  h = h.replace(new RegExp('^### (.+)$','gm'), '<h3>$1</h3>');
+  h = h.replace(new RegExp('^## (.+)$','gm'), '<h2>$1</h2>');
+  h = h.replace(new RegExp('^# (.+)$','gm'), '<h1>$1</h1>');
 
   // Bold and italic
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  h = h.replace(new RegExp('\\\\*\\\\*(.+?)\\\\*\\\\*','g'), '<strong>$1</strong>');
+  h = h.replace(new RegExp('\\\\*(.+?)\\\\*','g'), '<em>$1</em>');
 
   // Tables
-  h = h.replace(/^\|(.+)\|$/gm, line => {
-    if (/^\|[\s\-:|]+\|$/.test(line)) return '%%TABLESEP%%';
-    const cells = line.split('|').filter(c => c.trim());
-    return '<tr>' + cells.map(c => '<td>' + c.trim() + '</td>').join('') + '</tr>';
+  h = h.replace(new RegExp('^\\\\|(.+)\\\\|$','gm'), function(line) {
+    if (new RegExp('^\\\\|[\\\\s\\\\-:|]+\\\\|$').test(line)) return '%%TABLESEP%%';
+    var cells = line.split('|').filter(function(c){return c.trim()});
+    return '<tr>' + cells.map(function(c){return '<td>' + c.trim() + '</td>'}).join('') + '</tr>';
   });
-  h = h.replace(/%%TABLESEP%%\n?/g, '');
-  h = h.replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>');
+  h = h.replace(new RegExp('%%TABLESEP%%\\\\n?','g'), '');
+  h = h.replace(new RegExp('((?:<tr>.*</tr>\\\\n?)+)','g'), '<table>$1</table>');
 
   // Lists
-  h = h.replace(/^- (.+)$/gm, '<li>$1</li>');
-  h = h.replace(/((?:<li>.*<\/li>\n?)+)/g, m => '<ul>' + m + '</ul>');
+  h = h.replace(new RegExp('^- (.+)$','gm'), '<li>$1</li>');
+  h = h.replace(new RegExp('((?:<li>.*</li>\\\\n?)+)','g'), function(m){return '<ul>' + m + '</ul>'});
 
   // Numbered lists
-  h = h.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  h = h.replace(new RegExp('^\\\\d+\\\\. (.+)$','gm'), '<li>$1</li>');
 
   // Blockquotes
-  h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  h = h.replace(new RegExp('^&gt; (.+)$','gm'), '<blockquote>$1</blockquote>');
 
   // Paragraphs (lines that aren't already wrapped)
-  h = h.replace(/^(?!<[huplbt]|<\/|%%CODE)(.+)$/gm, '<p>$1</p>');
-  h = h.replace(/<p><\/p>/g, '');
+  h = h.replace(new RegExp('^(?!<[huplbt]|</|%%CODE)(.+)$','gm'), '<p>$1</p>');
+  h = h.replace(new RegExp('<p></p>','g'), '');
 
   // Restore code blocks
   codeBlocks.forEach((block, i) => {
