@@ -1,0 +1,27 @@
+{
+  "name": "claude-hud-lcars",
+  "version": "1.0.0",
+  "description": "LCARS-inspired operations dashboard for Claude Code. See every skill, agent, hook, MCP server, plugin, and memory file you've built, click into any of them and read the full content like a Star Trek PADD. Zero config, zero dependencies, just npx claude-hud-lcars.",
+  "type": "module",
+  "bin": {
+    "claude-hud-lcars": "./src/generate.js"
+  },
+  "scripts": {
+    "build": "node src/generate.js",
+    "open": "node src/generate.js && open dashboard.html"
+  },
+  "keywords": [
+    "claude-code",
+    "dashboard",
+    "skills",
+    "agents",
+    "mcp",
+    "hooks",
+    "plugins"
+  ],
+  "author": "Andre Figueira",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
