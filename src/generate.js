@@ -984,6 +984,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mkt-install-btn:hover{background:var(--orange);color:#000}
 .mkt-install-btn:disabled{border-color:var(--faint);color:var(--faint);cursor:default}
 .mkt-installed-badge{font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.1em;color:var(--green);text-transform:uppercase}
+.mkt-load-remote{font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:4px 13px;border:1.5px solid var(--cyan);background:transparent;color:var(--cyan);cursor:pointer;border-radius:3px;transition:all 0.15s}
+.mkt-load-remote:hover{background:rgba(102,204,204,0.15)}
+.mkt-load-remote:disabled{border-color:var(--faint);color:var(--faint);cursor:default}
 
 /* ═══ CONFIRM MODAL ═══ */
 .hud-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;animation:fadein .15s}
@@ -1828,12 +1831,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-market">
-        <div class="sec-h"><span>Marketplace // ${marketItems.length} Available</span></div>
+        <div class="sec-h"><span>Marketplace // <span id="mkt-count">${marketItems.length}</span> Available</span></div>
         <div class="mkt-filters" id="mkt-filters">
           <button class="mkt-filter-btn act" onclick="filterMkt('all',this)">ALL</button>
           <button class="mkt-filter-btn" onclick="filterMkt('plugin',this)">PLUGINS</button>
           <button class="mkt-filter-btn" onclick="filterMkt('mcp',this)">MCP SERVERS</button>
+          <button class="mkt-filter-btn" onclick="filterMkt('remote',this)">REMOTE</button>
           <button class="mkt-filter-btn" onclick="filterMkt('installed',this)">INSTALLED</button>
+          <button class="mkt-load-remote" id="mkt-load-btn" onclick="loadRemoteMarketplace()">&#x2B07; LOAD REGISTRY</button>
           <input class="mkt-search" id="mkt-search" type="text" placeholder="SEARCH..." oninput="filterMkt(window._mktFilter||'all')" autocomplete="off" spellcheck="false">
         </div>
         ${marketItems.length === 0 ? '<div class="emp">No marketplace data found</div>' : `
@@ -3843,11 +3848,86 @@ function filterMkt(type, btn) {
   var cards = document.querySelectorAll('#mkt-grid .mkt-card');
   cards.forEach(function(card) {
     var cardType = card.getAttribute('data-mkt-type');
+    var cardSource = card.getAttribute('data-source') || 'local';
     var isInstalled = card.classList.contains('installed');
-    var typeOk = type === 'all' || (type === 'installed' ? isInstalled : cardType === type);
+    var typeOk = type === 'all'
+      || (type === 'installed' ? isInstalled
+      : type === 'remote' ? cardSource === 'remote'
+      : cardType === type);
     var textOk = !qLow || (card.textContent||'').toLowerCase().indexOf(qLow) !== -1;
     card.style.display = (typeOk && textOk) ? '' : 'none';
   });
+}
+
+function loadRemoteMarketplace() {
+  var btn = document.getElementById('mkt-load-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'LOADING...'; }
+  fetch('/api/remote-marketplace')
+    .then(function(r) { return r.json(); })
+    .then(function(items) {
+      document.querySelectorAll('#mkt-grid .mkt-card[data-source="remote"]').forEach(function(c) { c.remove(); });
+      var installedNames = new Set();
+      if (window._D) { Object.keys(window._D).forEach(function(k) { if (k.startsWith('m:')) installedNames.add(k.slice(2)); }); }
+      var grid = document.getElementById('mkt-grid');
+      if (!grid) return;
+      items.forEach(function(item) {
+        var isInstalled = installedNames.has(item.shortName) || installedNames.has(item.name);
+        var div = document.createElement('div');
+        div.className = 'mkt-card' + (isInstalled ? ' installed' : '');
+        div.setAttribute('data-mkt-type', 'mcp');
+        div.setAttribute('data-source', 'remote');
+        div.setAttribute('data-remote-name', item.shortName);
+        div.setAttribute('data-remote-cmd', item.command);
+        div.setAttribute('data-remote-args', JSON.stringify(item.args));
+        div.style.display = 'none';
+        var installFoot = isInstalled
+          ? '<span class="mkt-installed-badge">&#10003; INSTALLED</span>'
+          : '<button class="mkt-install-btn" onclick="event.stopPropagation();installRemoteMcp(this)">+ INSTALL</button>';
+        div.innerHTML = '<div class="mkt-card-name">' + esc(item.name) + '</div>'
+          + '<div class="mkt-card-desc">' + esc(item.description || 'No description available.') + '</div>'
+          + '<div class="mkt-card-meta"><span class="mkt-cap mcp">MCP</span><span class="mkt-src">' + esc(item.sourceLabel) + '</span></div>'
+          + '<div class="mkt-card-footer">' + installFoot + '</div>';
+        grid.appendChild(div);
+      });
+      var count = document.getElementById('mkt-count');
+      if (count) {
+        var total = document.querySelectorAll('#mkt-grid .mkt-card').length;
+        count.textContent = total;
+      }
+      if (btn) { btn.disabled = false; btn.textContent = '\\u2713 LOADED (' + items.length + ')'; }
+      filterMkt(window._mktFilter || 'all');
+      toast('Loaded ' + items.length + ' remote servers');
+    })
+    .catch(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '\\u2B07 LOAD REGISTRY'; }
+      toast('ERROR: ' + e.message);
+    });
+}
+
+function installRemoteMcp(btn) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  var card = btn.closest('.mkt-card');
+  var name = card.getAttribute('data-remote-name');
+  var command = card.getAttribute('data-remote-cmd');
+  var args = JSON.parse(card.getAttribute('data-remote-args') || '[]');
+  btn.disabled = true; btn.textContent = '...';
+  fetch('/api/marketplace/install-remote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, command: command, args: args }) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        btn.style.display = 'none';
+        var badge = document.createElement('span');
+        badge.className = 'mkt-installed-badge'; badge.textContent = '\\u2713 INSTALLED';
+        btn.parentNode.appendChild(badge);
+        card.classList.add('installed');
+        toast('MCP INSTALLED: ' + name);
+        beepAction();
+      } else {
+        btn.disabled = false; btn.textContent = '+ INSTALL';
+        toast('ERROR: ' + (d.error || 'Install failed'));
+      }
+    })
+    .catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
 }
 
 function installMarketItem(btn, id, type, sourcePath, mcpConfigJson) {

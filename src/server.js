@@ -688,6 +688,78 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     return;
   }
 
+  // Remote marketplace: fetch from official MCP registry + npm, merge, cache 5 min
+  if (req.method === 'GET' && req.url === '/api/remote-marketplace') {
+    const now = Date.now();
+    if (server._rmCache && (now - server._rmCacheAt) < 5 * 60 * 1000) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(server._rmCache));
+      return;
+    }
+    const results = [];
+    const seen = new Set();
+    // Source 1: official MCP registry
+    try {
+      let cursor = null;
+      do {
+        const url = 'https://registry.modelcontextprotocol.io/v0.1/servers' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : '');
+        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) break;
+        const data = await r.json();
+        for (const s of (data.servers || [])) {
+          const n = (s.name || '').trim();
+          if (!n || seen.has(n)) continue;
+          seen.add(n);
+          const shortName = n.includes('/') ? n.split('/').pop() : n;
+          results.push({ id: 'registry:' + n, name: n, shortName, description: s.description || '', type: 'mcp', source: 'registry', sourceLabel: 'MCP REGISTRY', command: 'npx', args: ['-y', n] });
+        }
+        cursor = data.cursor || null;
+      } while (cursor);
+    } catch(e) { /* network unavailable, skip */ }
+    // Source 2: npm packages tagged mcp-server
+    try {
+      const r = await fetch('https://registry.npmjs.org/-/v1/search?text=keywords%3Amcp-server&size=250', { signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const data = await r.json();
+        for (const obj of (data.objects || [])) {
+          const p = obj.package;
+          const n = (p.name || '').trim();
+          if (!n || seen.has(n)) continue;
+          seen.add(n);
+          const shortName = n.includes('/') ? n.split('/').pop() : n;
+          results.push({ id: 'npm:' + n, name: n, shortName, description: p.description || '', type: 'mcp', source: 'npm', sourceLabel: 'NPM', command: 'npx', args: ['-y', n] });
+        }
+      }
+    } catch(e) { /* network unavailable, skip */ }
+    results.sort((a, b) => a.name.localeCompare(b.name));
+    server._rmCache = results;
+    server._rmCacheAt = Date.now();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(results));
+    return;
+  }
+
+  // Install a remote MCP server (npx/uvx) directly into settings.json
+  if (req.method === 'POST' && req.url === '/api/marketplace/install-remote') {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      try {
+        const { name, command, args } = JSON.parse(body);
+        if (!name || !command) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'name and command required' })); return; }
+        const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+        let settings = {};
+        try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch(e) {}
+        if (!settings.mcpServers) settings.mcpServers = {};
+        settings.mcpServers[name] = { command, args: args || [] };
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, name }));
+      } catch(e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+
   // MCP server health check
   if (req.method === 'GET' && req.url === '/api/mcp-status') {
     const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
