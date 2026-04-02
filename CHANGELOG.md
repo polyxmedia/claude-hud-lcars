@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.0 - 2026-04-02
+
+- Discover panel — one-click install suggestions for skills, agents, MCP servers, and hooks you haven't set up yet. Collapsed by default, expandable per section
+- Skills/agents/hooks install directly into ~/.claude via the live server API. MCP servers write into settings.json via new /api/settings-update endpoint
+- PWA icon generation in server.js — LCARS-styled icon served from /icon.png with no external assets
+- Expanded server test suite
+- escA() helper for safe HTML attribute escaping of JSON values embedded in onclick handlers
+
 ## 1.1.0 - 2026-04-02
 
 - Expanded test suite to 87 tests covering all data-parsing functions: getSettings, getMcpServers, getSessionCount, getSessions, getHistory, getClaudeMdFiles, parseMcpEntry, getHooks, getPlugins, getEnv, esc, escJ
@@ -29,22 +37,3 @@ Free to use, modify, and share — commercial use not permitted.
 
 ## 2026-04-02 - CLI: auto-open browser, --serve flag, --help
 
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<
-
-## 2026-04-02 - $(cat <<

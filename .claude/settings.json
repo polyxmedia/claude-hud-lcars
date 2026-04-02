@@ -1,18 +1,1 @@
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/andrefigueira/Code/claude-ideas/claude-dashboard/.claude/hooks/changelog-append.sh",
-            "if": "Bash(git commit*)",
-            "statusMessage": "Updating CHANGELOG.md...",
-            "async": true
-          }
-        ]
-      }
-    ]
-  }
-}
+{}

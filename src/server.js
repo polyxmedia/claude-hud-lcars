@@ -4,6 +4,57 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import zlib from 'zlib';
+
+// CRC32 table built once at module load (used by solidPng)
+const _crc32Table = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c;
+  }
+  return t;
+})();
+
+// Minimal solid-color PNG generator (no external deps) — used for PWA icons
+function solidPng(size, r, g, b) {
+  function crc32(buf) {
+    let c = 0xffffffff;
+    for (const b of buf) c = _crc32Table[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+  function chunk(type, data) {
+    const t = Buffer.from(type);
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const crcVal = Buffer.alloc(4); crcVal.writeUInt32BE(crc32(Buffer.concat([t, data])));
+    return Buffer.concat([len, t, data, crcVal]);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const rowSize = 1 + size * 3;
+  const raw = Buffer.alloc(size * rowSize);
+  for (let y = 0; y < size; y++) {
+    // filter byte 0 (None) + RGB per pixel
+    const base = y * rowSize + 1;
+    for (let x = 0; x < size; x++) {
+      // LCARS icon: left 40% orange sidebar, right area black with orange top bar
+      const isLeftBar = x < size * 0.35;
+      const isTopBar = !isLeftBar && y < size * 0.28;
+      const isBtmBar = !isLeftBar && y > size * 0.72;
+      let pr = 0, pg = 0, pb = 0;
+      if (isLeftBar || isTopBar || isBtmBar) { pr = r; pg = g; pb = b; }
+      raw[base + x * 3] = pr; raw[base + x * 3 + 1] = pg; raw[base + x * 3 + 2] = pb;
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 const PORT = parseInt(process.env.PORT || '3200', 10);
 const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY || process.env.ANTHROPIC_API_KEY;
@@ -11,6 +62,14 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // "Sarah" - clear, professional female
+
+// Self-restart: if spawned with a delay flag, wait for the old process to release the port
+if (process.env.CLAUDE_HUD_RESTART_DELAY) {
+  await new Promise(r => setTimeout(r, parseInt(process.env.CLAUDE_HUD_RESTART_DELAY, 10) || 800));
+}
+
+let PKG_VERSION = 'unknown';
+try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
 
 // Import the dashboard generator
 const dashboardPath = path.join(import.meta.dirname, '..', 'dashboard.html');
@@ -22,14 +81,87 @@ async function generateDashboard() {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS headers for local dev
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Block cross-origin POST/PUT/DELETE (CSRF protection — localhost server writes files)
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
+    const origin = req.headers.origin;
+    if (origin && origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cross-origin requests not allowed' }));
+      return;
+    }
+  }
+
+  // CORS headers (read-only paths allow any origin; mutations already blocked above)
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // Web app manifest for PWA install
+  if (req.method === 'GET' && req.url === '/manifest.json') {
+    const manifest = {
+      name: 'Claude Dashboard',
+      short_name: 'Claude HUD',
+      description: 'LCARS-style dashboard for your Claude Code environment',
+      start_url: '/',
+      display: 'standalone',
+      background_color: '#000000',
+      theme_color: '#FF9900',
+      icons: [
+        { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+    res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+    res.end(JSON.stringify(manifest));
+    return;
+  }
+
+  // Service worker — fetch handler required for Chrome PWA install eligibility
+  if (req.method === 'GET' && req.url === '/sw.js') {
+    const sw = `
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+// Always fetch from network — server generates fresh content on every load
+self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
+`;
+    res.writeHead(200, { 'Content-Type': 'application/javascript' });
+    res.end(sw);
+    return;
+  }
+
+  // App icon SVG
+  if (req.method === 'GET' && req.url === '/icon.svg') {
+    const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#000"/>
+  <rect x="0" y="0" width="60" height="192" rx="30" fill="#FF9900"/>
+  <rect x="70" y="0" width="122" height="50" rx="8" fill="#CC6600"/>
+  <rect x="70" y="60" width="122" height="12" rx="4" fill="#FF9900"/>
+  <rect x="70" y="82" width="80" height="12" rx="4" fill="#996633"/>
+  <rect x="70" y="104" width="122" height="50" rx="8" fill="#CC6600"/>
+  <rect x="70" y="164" width="122" height="28" rx="8" fill="#FF9900"/>
+</svg>`;
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+    res.end(icon);
+    return;
+  }
+
+  // App icons as PNG (Chrome requires PNG for PWA install prompt)
+  if (req.method === 'GET' && req.url === '/icon-192.png') {
+    res.writeHead(200, { 'Content-Type': 'image/png' });
+    res.end(solidPng(192, 0xFF, 0x99, 0x00));
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/icon-512.png') {
+    res.writeHead(200, { 'Content-Type': 'image/png' });
+    res.end(solidPng(512, 0xFF, 0x99, 0x00));
     return;
   }
 
@@ -40,14 +172,270 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Version check — current version + latest from npm registry
+  if (req.method === 'GET' && req.url === '/api/version') {
+    try {
+      const npmRes = await fetch('https://registry.npmjs.org/claude-hud-lcars/latest');
+      const data = await npmRes.json();
+      const latest = data.version || PKG_VERSION;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ current: PKG_VERSION, latest, hasUpdate: latest !== PKG_VERSION }));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ current: PKG_VERSION, latest: null, hasUpdate: false }));
+    }
+    return;
+  }
+
+  // Run update — streams npm install -g output then restarts
+  if (req.method === 'POST' && req.url === '/api/update') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    const { spawn } = await import('child_process');
+    const proc = spawn('npm', ['install', '-g', 'claude-hud-lcars@latest'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    proc.stdout.on('data', d => res.write('data: ' + JSON.stringify({ text: d.toString() }) + '\n\n'));
+    proc.stderr.on('data', d => res.write('data: ' + JSON.stringify({ text: d.toString() }) + '\n\n'));
+    proc.on('close', code => {
+      res.write('data: ' + JSON.stringify({ done: true, code }) + '\n\n');
+      res.end();
+      if (code === 0) {
+        setTimeout(async () => {
+          const child = spawn(process.execPath, [import.meta.filename], {
+            detached: true, stdio: 'ignore',
+            env: { ...process.env, CLAUDE_HUD_RESTART_DELAY: '800' },
+          });
+          child.unref();
+          process.exit(0);
+        }, 300);
+      }
+    });
+    return;
+  }
+
+  // Restart: spawn a fresh server instance then exit (client polls /api/health to detect comeback)
+  if (req.method === 'POST' && req.url === '/api/restart') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    setTimeout(async () => {
+      const { spawn } = await import('child_process');
+      const child = spawn(process.execPath, [import.meta.filename], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env, CLAUDE_HUD_RESTART_DELAY: '800' },
+      });
+      child.unref();
+      process.exit(0);
+    }, 200);
+    return;
+  }
+
   // Serve dashboard
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
     try {
       // Regenerate each time for freshness
       await generateDashboard();
       let html = fs.readFileSync(dashboardPath, 'utf-8');
-      // Inject chat capability flag and voice mode
-      html = html.replace('</head>', '<script>window.HUD_LIVE=true;window.HUD_ELEVENLABS=' + (!!ELEVEN_KEY) + ';</script></head>');
+      // Inject PWA meta tags, manifest link, chat flag, voice mode
+      const pwaHead = [
+        '<link rel="manifest" href="/manifest.json">',
+        '<meta name="theme-color" content="#FF9900">',
+        '<meta name="mobile-web-app-capable" content="yes">',
+        '<meta name="apple-mobile-web-app-capable" content="yes">',
+        '<meta name="apple-mobile-web-app-title" content="Claude HUD">',
+        '<link rel="apple-touch-icon" href="/icon.svg">',
+        '<script>window.HUD_LIVE=true;window.HUD_ELEVENLABS=' + (!!ELEVEN_KEY) + ';</script>',
+      ].join('');
+      // Use lastIndexOf to safely handle any extra </head>/<body> tags in generated content
+      const headIdx = html.lastIndexOf('</head>');
+      if (headIdx !== -1) html = html.slice(0, headIdx) + pwaHead + '</head>' + html.slice(headIdx + 7);
+
+      // Inject install/bookmark banner + SW registration before </body>
+      const pwaBanner = `
+<style>
+#pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:9999;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#0a0a0a;border-top:2px solid #FF9900;font-family:monospace;font-size:12px;color:#FF9900;letter-spacing:.05em}
+#pwa-banner.hidden{display:none}
+#pwa-banner .pwa-label{flex:1;text-transform:uppercase;opacity:.8}
+#pwa-banner button{background:#FF9900;color:#000;border:none;padding:6px 14px;font-family:monospace;font-size:11px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px}
+#pwa-banner button:hover{background:#FFAA22}
+#pwa-banner .pwa-bm{background:transparent;color:#FF9900;border:1px solid #FF9900}
+#pwa-banner .pwa-bm:hover{background:#FF990022}
+#pwa-banner .pwa-close{background:transparent;color:#666;border:none;font-size:16px;padding:4px 8px;line-height:1}
+#pwa-banner .pwa-close:hover{color:#FF9900}
+#hud-toolbar{position:fixed;top:10px;right:14px;z-index:9998;display:flex;align-items:center;gap:6px}
+.hud-tb-btn{background:transparent;color:#FF9900;border:1px solid #FF9900;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:.45;transition:opacity .15s,background .15s}
+.hud-tb-btn:hover{opacity:1;background:#FF990011}
+#hud-update-badge{background:#FF4400;color:#fff;border:none;opacity:1;animation:upd-pulse 2s ease-in-out infinite}
+@keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
+#update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
+#update-modal.open{display:flex}
+#update-modal .um-box{background:#07070d;border:2px solid #FF9900;padding:24px 28px;width:480px;max-width:94vw;font-family:monospace}
+#update-modal .um-title{font-size:13px;color:#FF9900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
+#update-modal .um-versions{display:flex;gap:16px;margin-bottom:16px;font-size:11px}
+#update-modal .um-v{color:var(--dim,#555)}
+#update-modal .um-v span{color:#eee}
+#update-modal .um-log{background:#02020a;border:1px solid #1a1a1e;padding:10px;height:140px;overflow-y:auto;font-size:10px;color:#88aa66;white-space:pre-wrap;display:none;margin-bottom:12px}
+#update-modal .um-actions{display:flex;gap:8px;justify-content:flex-end}
+#update-modal button{background:#FF9900;color:#000;border:none;padding:6px 16px;font-family:monospace;font-size:11px;font-weight:bold;text-transform:uppercase;cursor:pointer;border-radius:2px}
+#update-modal .um-cancel{background:transparent;color:#666;border:1px solid #333}
+#reconnect-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:monospace;color:#FF9900}
+#reconnect-overlay.active{display:flex}
+#reconnect-overlay .rc-title{font-size:14px;letter-spacing:.15em;text-transform:uppercase}
+#reconnect-overlay .rc-dots span{display:inline-block;width:8px;height:8px;border-radius:50%;background:#FF9900;margin:0 3px;animation:rc-pulse 1.2s ease-in-out infinite}
+#reconnect-overlay .rc-dots span:nth-child(2){animation-delay:.2s}
+#reconnect-overlay .rc-dots span:nth-child(3){animation-delay:.4s}
+@keyframes rc-pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+</style>
+<div id="hud-toolbar">
+  <span id="hud-version" style="font-family:monospace;font-size:10px;color:#444;letter-spacing:.06em"></span>
+  <button class="hud-tb-btn" id="hud-update-badge" style="display:none" onclick="document.getElementById('update-modal').classList.add('open')">UPDATE AVAILABLE</button>
+  <button class="hud-tb-btn" id="restart-btn" title="Restart server &amp; regenerate dashboard">&#8635; Restart</button>
+</div>
+<div id="update-modal">
+  <div class="um-box">
+    <div class="um-title">&#9650; Update Available</div>
+    <div class="um-versions">
+      <div class="um-v">CURRENT <span id="um-current">—</span></div>
+      <div class="um-v">LATEST <span id="um-latest" style="color:#FF9900">—</span></div>
+    </div>
+    <div class="um-log" id="um-log"></div>
+    <div class="um-actions">
+      <button class="um-cancel" onclick="document.getElementById('update-modal').classList.remove('open')">Cancel</button>
+      <button id="um-run-btn" onclick="runUpdate()">Install Update</button>
+    </div>
+  </div>
+</div>
+<div id="reconnect-overlay">
+  <div class="rc-title">Restarting LCARS</div>
+  <div class="rc-dots"><span></span><span></span><span></span></div>
+</div>
+<div id="pwa-banner" class="hidden">
+  <span class="pwa-label">Add to home screen for quick access</span>
+  <button id="pwa-install" style="display:none">Install App</button>
+  <button class="pwa-bm" id="pwa-bookmark">Bookmark <span id="pwa-bm-key">⌘D</span></button>
+  <button class="pwa-close" id="pwa-dismiss" title="Dismiss">×</button>
+</div>
+<script>
+(function(){
+  const DISMISSED_KEY = 'pwa_banner_dismissed';
+  const banner = document.getElementById('pwa-banner');
+  const installBtn = document.getElementById('pwa-install');
+  const bookmarkBtn = document.getElementById('pwa-bookmark');
+  const dismissBtn = document.getElementById('pwa-dismiss');
+  const bmKey = document.getElementById('pwa-bm-key');
+
+  if (localStorage.getItem(DISMISSED_KEY)) return;
+
+  // Show correct bookmark shortcut
+  const isMac = navigator.platform.toUpperCase().includes('MAC') || navigator.userAgent.includes('Mac');
+  if (bmKey) bmKey.textContent = isMac ? '⌘D' : 'Ctrl+D';
+
+  let deferredPrompt = null;
+  let showTimer = setTimeout(() => {
+    if (!localStorage.getItem(DISMISSED_KEY)) banner.classList.remove('hidden');
+  }, 3000);
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    clearTimeout(showTimer);
+    installBtn.style.display = 'inline-block';
+    banner.classList.remove('hidden');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (outcome === 'accepted') {
+      localStorage.setItem(DISMISSED_KEY, '1');
+      banner.classList.add('hidden');
+    }
+  });
+
+  bookmarkBtn.addEventListener('click', () => {
+    // Browsers block programmatic bookmark creation — just prompt the shortcut
+    if (bmKey) { bmKey.textContent = isMac ? '— press now!' : '— press now!'; }
+    setTimeout(() => { if (bmKey) bmKey.textContent = isMac ? '⌘D' : 'Ctrl+D'; }, 2000);
+  });
+
+  dismissBtn.addEventListener('click', () => {
+    clearTimeout(showTimer);
+    localStorage.setItem(DISMISSED_KEY, '1');
+    banner.classList.add('hidden');
+  });
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  // Version check
+  (async function() {
+    try {
+      const vr = await fetch('/api/version');
+      const vd = await vr.json();
+      const vEl = document.getElementById('hud-version');
+      if (vEl) vEl.textContent = 'v' + vd.current;
+      document.getElementById('um-current').textContent = vd.current;
+      document.getElementById('um-latest').textContent = vd.latest || '—';
+      if (vd.hasUpdate) {
+        document.getElementById('hud-update-badge').style.display = 'inline-block';
+      }
+    } catch {}
+  })();
+
+  function runUpdate() {
+    var log = document.getElementById('um-log');
+    var btn = document.getElementById('um-run-btn');
+    log.style.display = 'block';
+    log.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Installing...';
+    var es = new EventSource('/api/update');
+    es.onmessage = function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        if (d.text) { log.textContent += d.text; log.scrollTop = log.scrollHeight; }
+        if (d.done) {
+          es.close();
+          if (d.code === 0) {
+            log.textContent += '\nUpdate complete — restarting...';
+            setTimeout(function() { location.reload(); }, 2000);
+          } else {
+            btn.textContent = 'Failed — see log';
+            btn.disabled = false;
+          }
+        }
+      } catch {}
+    };
+    es.onerror = function() { es.close(); btn.textContent = 'Error'; btn.disabled = false; };
+  }
+
+  // Restart button
+  const restartBtn = document.getElementById('restart-btn');
+  const overlay = document.getElementById('reconnect-overlay');
+  if (restartBtn) {
+    restartBtn.addEventListener('click', async () => {
+      restartBtn.disabled = true;
+      overlay.classList.add('active');
+      try { await fetch('/api/restart', { method: 'POST' }); } catch {}
+      // Poll health until the new server is up, then reload
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('/api/health');
+          if (r.ok) { clearInterval(poll); location.reload(); }
+        } catch {}
+      }, 600);
+    });
+  }
+})();
+</script>`;
+      const bodyIdx = html.lastIndexOf('</body>');
+      if (bodyIdx !== -1) html = html.slice(0, bodyIdx) + pwaBanner + '</body>' + html.slice(bodyIdx + 7);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (e) {
@@ -192,7 +580,6 @@ const server = http.createServer(async (req, res) => {
     try {
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
       const servers = settings.mcpServers || {};
-      const { execSync } = await import('child_process');
       const results = {};
 
       for (const [name, config] of Object.entries(servers)) {

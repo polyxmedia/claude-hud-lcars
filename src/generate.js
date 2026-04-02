@@ -278,6 +278,8 @@ function getEnv(s) { return s?.env || {}; }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escJ(s) { return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/`/g,'\\u0060').replace(/\$/g,'\\u0024'); }
+// escJ output safe for placement inside a double-quoted HTML attribute
+function escA(s) { return escJ(s).replace(/"/g,'&quot;'); }
 
 // ── BUILD ──
 
@@ -289,6 +291,99 @@ function gen() {
   const sessionList = getSessions(), history = getHistory(), claudeMds = getClaudeMdFiles();
   const ts = new Date().toISOString().replace('T',' ').slice(0,19)+'Z';
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
+
+  // ── DISCOVER SUGGESTIONS ──
+  const installedSkillNames = new Set(skills.map(s => s.name));
+  const installedAgentNames = new Set(agents.map(a => a.name));
+  const installedMcpNames = new Set(mcp.map(m => m.name));
+
+  const SKILL_SUGG = [
+    { name: 'code-review', desc: 'Principal-level code review: security, logic, performance, architecture', content: '---\nname: code-review\ndescription: "Principal-level code review"\ncontext: fork\nversion: 1.0.0\n---\n\nReview the changed code with principal-engineer judgment:\n1. Security vulnerabilities (OWASP top 10, injection, auth)\n2. Logic errors and edge cases\n3. Performance implications\n4. Code quality and maintainability\n5. Missing tests\n\nFormat each finding as [CRITICAL/HIGH/MEDIUM/LOW] — issue — suggested fix.' },
+    { name: 'commit', desc: 'Create a well-structured git commit for staged changes', content: '---\nname: commit\ndescription: "Create a well-structured git commit"\ncontext: fork\nversion: 1.0.0\n---\n\nCreate a git commit for the current staged changes:\n1. Run `git diff --staged` to understand what changed\n2. Write a concise commit message in imperative mood (under 72 chars)\n3. Run `git commit -m "message"`\nIf nothing is staged, ask what to commit.' },
+    { name: 'deploy-check', desc: 'Pre-deployment validation: tests, secrets, build, dependencies', content: '---\nname: deploy-check\ndescription: "Pre-deployment validation checklist"\ncontext: fork\nversion: 1.0.0\n---\n\nRun pre-deployment checks:\n1. Run the test suite and report results\n2. Check for secrets or credentials in tracked files\n3. Verify the build succeeds cleanly\n4. Check for outdated or vulnerable dependencies\n5. Confirm required environment variables are documented\n\nDeliver a GO / NO-GO verdict with reasons.' },
+    { name: 'emergent-approach', desc: 'Plan and design before implementing — surfaces trade-offs and edge cases', content: '---\nname: emergent-approach\ndescription: "Design a solution before writing code"\ncontext: inline\nversion: 1.0.0\n---\n\nBefore writing any code:\n1. Restate the problem to confirm understanding\n2. Propose 2-3 approaches with trade-offs\n3. Identify edge cases and failure modes\n4. Recommend one approach with rationale\n5. Outline implementation steps\n\nOnly proceed to code once the plan is agreed.' },
+    { name: 'voice-capture', desc: 'Run an interview to capture someone\'s writing voice as a reusable profile', content: '---\nname: voice-capture\ndescription: "Capture a writing voice profile via interview"\ncontext: inline\nversion: 1.0.0\n---\n\nRun a voice extraction interview:\n1. Ask 5-7 questions about writing style, pet phrases, and opinions\n2. Ask for 2-3 writing samples\n3. Analyse the samples for tone, sentence structure, vocabulary, and patterns\n4. Produce a voice-substrate.md file with the captured profile.' },
+  ].filter(s => !installedSkillNames.has(s.name));
+
+  const AGENT_SUGG = [
+    { name: 'security-auditor', desc: 'Audit code for OWASP vulnerabilities, hardcoded secrets, and auth issues', content: '---\nname: security-auditor\ndescription: "Audit code for security vulnerabilities"\n---\ntools: Read, Grep, Glob, Bash\n\nYou are a security expert. When invoked:\n1. Identify the tech stack\n2. Check for OWASP Top 10 vulnerabilities\n3. Look for hardcoded secrets, insecure dependencies, injection points\n4. Review authentication and authorisation logic\n5. Produce a prioritised report: CRITICAL/HIGH/MEDIUM/LOW with remediation steps' },
+    { name: 'test-generator', desc: 'Generate comprehensive test suites with edge cases and error paths', content: '---\nname: test-generator\ndescription: "Generate comprehensive tests for code"\n---\ntools: Read, Grep, Glob, Write, Bash\n\nYou are an expert in test-driven development. When invoked:\n1. Read the target file and understand its logic\n2. Identify testable units, edge cases, error paths, and happy paths\n3. Generate tests using the project\'s existing test framework\n4. Run the tests and fix any failures before returning' },
+    { name: 'documentation-writer', desc: 'Write clear, accurate API and code documentation', content: '---\nname: documentation-writer\ndescription: "Write API and code documentation"\n---\ntools: Read, Grep, Glob, Write\n\nYou are a technical writer. When invoked:\n1. Read the target file or API\n2. Identify public interfaces, functions, and types\n3. Write clear documentation: purpose, parameters, return values, examples\n4. Follow the project\'s existing documentation style\n5. Keep it accurate and concise' },
+    { name: 'performance-analyst', desc: 'Profile and identify performance bottlenecks in code', content: '---\nname: performance-analyst\ndescription: "Identify performance bottlenecks and suggest fixes"\n---\ntools: Read, Grep, Glob, Bash\n\nYou are a performance engineering expert. When invoked:\n1. Identify hot paths and expensive operations\n2. Look for N+1 queries, unnecessary re-renders, blocking I/O\n3. Suggest algorithmic improvements with complexity analysis\n4. Profile if tooling is available\n5. Rank suggestions by impact' },
+  ].filter(a => !installedAgentNames.has(a.name));
+
+  const MCP_SUGG = [
+    { name: 'filesystem', desc: 'Read and write files anywhere on the filesystem, beyond project scope', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '~'], env: null },
+    { name: 'memory', desc: 'Persistent knowledge graph — Claude remembers facts across sessions', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], env: null },
+    { name: 'sequential-thinking', desc: 'Enhanced step-by-step reasoning for complex problems', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], env: null },
+    { name: 'puppeteer', desc: 'Browser automation — navigate, screenshot, and scrape web pages', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'], env: null },
+    { name: 'github', desc: 'Read/write GitHub repos, issues, PRs, and comments via API', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '' } },
+    { name: 'brave-search', desc: 'Web and local search powered by the Brave Search API', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } },
+    { name: 'postgres', desc: 'Query and inspect a PostgreSQL database via natural language', cmd: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'], env: null },
+    { name: 'fetch', desc: 'Fetch any URL and return its content as markdown', cmd: 'uvx', args: ['mcp-server-fetch'], env: null },
+  ].filter(m => !installedMcpNames.has(m.name));
+
+  const HOOK_SUGG = [
+    { name: 'Done notification', event: 'Stop', desc: 'Desktop notification when Claude finishes a task', cmd: 'osascript -e \'display notification "Claude finished" with title "Claude Code"\'' },
+    { name: 'Dangerous command blocker', event: 'PreToolUse', matcher: 'Bash', desc: 'Block destructive shell commands — rm -rf, DROP TABLE, force push', cmd: 'python3 -c "import sys,json; d=json.load(sys.stdin); cmd=d.get(\'tool_input\',{}).get(\'command\',\'\'); bad=any(x in cmd for x in [\'rm -rf /\',\'DROP TABLE\',\'--force\',\'format c:\']); sys.exit(2 if bad else 0)"' },
+    { name: 'Auto-format on write', event: 'PostToolUse', matcher: 'Write', desc: 'Run prettier on any file Claude writes', cmd: 'prettier --write "$(echo $CLAUDE_TOOL_INPUT | python3 -c \"import sys,json; print(json.load(sys.stdin)[\'path\'])\")" 2>/dev/null || true' },
+    { name: 'Session summary', event: 'Stop', desc: 'Append a one-line summary of what Claude did to a daily log', cmd: 'echo "[$(date +%H:%M)] Claude session ended in $(pwd)" >> ~/claude-sessions.log' },
+  ];
+
+  function discoverHtml(id, cardsHtml, count) {
+    if (!count) return '';
+    return '<div class="discover">'
+      + '<div class="discover-hdr" onclick="toggleDiscover(this,\'' + id + '\')" id="dh-' + id + '">'
+      + '<span class="discover-arrow">&#9658;</span>'
+      + ' DISCOVER &#x2014; ' + count + ' SUGGESTION' + (count !== 1 ? 'S' : '')
+      + '</div>'
+      + '<div class="discover-body" id="db-' + id + '" style="display:none">' + cardsHtml + '</div>'
+      + '</div>';
+  }
+
+  const skillDiscoverCards = SKILL_SUGG.map(s => `
+    <div class="suggest-card">
+      <div class="suggest-name">${esc(s.name)}</div>
+      <div class="suggest-desc">${esc(s.desc)}</div>
+      <div class="suggest-footer">
+        <span class="suggest-tag">skill</span>
+        <button class="suggest-install" onclick="installSuggestSkill(this,${escA(s.name)},${escA(s.content)})">+ INSTALL</button>
+      </div>
+    </div>`).join('');
+
+  const agentDiscoverCards = AGENT_SUGG.map(a => `
+    <div class="suggest-card">
+      <div class="suggest-name">${esc(a.name)}</div>
+      <div class="suggest-desc">${esc(a.desc)}</div>
+      <div class="suggest-footer">
+        <span class="suggest-tag">agent</span>
+        <button class="suggest-install" onclick="installSuggestAgent(this,${escA(a.name)},${escA(a.content)})">+ INSTALL</button>
+      </div>
+    </div>`).join('');
+
+  const mcpDiscoverCards = MCP_SUGG.map(m => {
+    const cfg = { command: m.cmd, args: m.args };
+    if (m.env) cfg.env = m.env;
+    return `
+    <div class="suggest-card">
+      <div class="suggest-name">${esc(m.name)}</div>
+      <div class="suggest-desc">${esc(m.desc)}</div>
+      <div class="suggest-footer">
+        <span class="suggest-tag">${esc(m.cmd)}</span>
+        <button class="suggest-install" onclick="installSuggestMcp(this,${escA(m.name)},${escA(JSON.stringify(cfg))})">+ INSTALL</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const hookDiscoverCards = HOOK_SUGG.map(h => `
+    <div class="suggest-card">
+      <div class="suggest-name">${esc(h.name)}</div>
+      <div class="suggest-desc">${esc(h.desc)}</div>
+      <div class="suggest-footer">
+        <span class="suggest-tag">${esc(h.event)}</span>
+        <button class="suggest-install" onclick="installSuggestHook(this,${escA(h.event)},${escA(h.matcher||'')},${escA(h.cmd)})">+ INSTALL</button>
+      </div>
+    </div>`).join('');
 
   const D = {};
   skills.forEach(s => {
@@ -691,6 +786,23 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card-status-label.missing{color:var(--orange)}
 .mcp-card-status-label.unknown{color:var(--tan)}
 .mcp-card-status-label.checking{color:var(--blue)}
+
+/* ═══ DISCOVER ═══ */
+.discover{border-top:1px dashed #1a1a1e;margin-top:4px}
+.discover-hdr{padding:10px 20px;font-size:0.75rem;color:var(--faint,#333);cursor:pointer;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.1em;user-select:none;transition:color .15s}
+.discover-hdr:hover,.discover-hdr.open{color:var(--tan,#bb8844)}
+.discover-arrow{font-size:0.65rem;transition:transform .15s;display:inline-block}
+.discover-hdr.open .discover-arrow{transform:rotate(90deg)}
+.discover-body{padding:8px 12px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.suggest-card{background:#05050a;border:1px solid #141420;padding:12px 14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s}
+.suggest-card:hover{border-color:#FF990033}
+.suggest-name{font-size:0.88rem;font-weight:600;color:#ccc}
+.suggest-desc{font-size:0.77rem;color:var(--dim,#555);flex:1;line-height:1.5}
+.suggest-footer{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.suggest-tag{font-size:0.63rem;color:var(--tan,#bb8844);text-transform:uppercase;letter-spacing:.07em}
+.suggest-install{background:#FF9900;color:#000;border:none;padding:3px 10px;font-family:monospace;font-size:0.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px;transition:background .1s}
+.suggest-install:hover{background:#FFAA22}
+.suggest-install:disabled{background:#2a2a2a;color:#555;cursor:default}
 
 /* ═══ DETAIL PANEL (PADD) ═══ */
 .dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative;border-radius:12px}
@@ -1436,6 +1548,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-tg">${s.ctx?`<span class="tg tg-b">${esc(s.ctx)}</span>`:''}${s.ver?`<span class="tg tg-d">v${esc(s.ver)}</span>`:''}</span>
           <span class="r-d">${esc(s.desc)}</span>
         </div>`).join('')}
+        ${discoverHtml('skills', skillDiscoverCards, SKILL_SUGG.length)}
       </div>
 
       <div class="sec" id="s-mcp">
@@ -1482,6 +1595,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             </div>
           </div>`).join('')}
         </div>`}
+        ${discoverHtml('mcp', mcpDiscoverCards, MCP_SUGG.length)}
       </div>
 
       <div class="sec" id="s-hooks">
@@ -1500,6 +1614,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-tg"><span class="tg tg-t">${esc(h.type)}</span><span class="tg tg-b">${esc(h.matcher)}</span>${h.async?'<span class="tg tg-g">async</span>':''}</span>
           <span class="r-d">${esc(h.cmd.slice(0,100))}</span>
         </div>`).join('')}
+        ${discoverHtml('hooks', hookDiscoverCards, HOOK_SUGG.length)}
       </div>
 
       <div class="sec" id="s-plugins">
@@ -1531,6 +1646,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-id">${esc(a.name)}</span>
           <span class="r-d">${esc(a.desc)}</span>
         </div>`).join('')}
+        ${discoverHtml('agents', agentDiscoverCards, AGENT_SUGG.length)}
       </div>
 
       <div class="sec" id="s-env">
@@ -1812,7 +1928,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
       </div>
 
-      <div class="sec" id="s-about" style="position:relative;overflow:hidden">
+      <div class="sec" id="s-about" style="position:relative;overflow:hidden;height:100%">
         <canvas id="viewscreen" style="position:absolute;inset:0;width:100%;height:100%;z-index:0"></canvas>
         <div class="about" style="position:relative;z-index:1">
           <div class="about-hero">
@@ -3262,6 +3378,68 @@ setTimeout(function() {
       + '<div class="session-stat"><div class="session-stat-n" style="color:var(--peach);font-size:0.9rem">' + esc(topProject) + '</div><div class="session-stat-l">Most Active</div></div>';
   })();
 }, 0);
+
+// ═══ DISCOVER / SUGGESTIONS ═══
+function toggleDiscover(hdr, id) {
+  var body = document.getElementById('db-' + id);
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'grid';
+  hdr.classList.toggle('open', !open);
+  beepNav();
+}
+
+function installSuggestSkill(btn, name, content) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  var filePath = '${esc(path.join(CLAUDE_DIR, 'skills'))}/' + name + '/SKILL.md';
+  fetch('/api/save', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('SKILL INSTALLED: ' + name); setTimeout(function() { location.reload(); }, 800); }
+    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
+  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+}
+
+function installSuggestAgent(btn, name, content) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  var filePath = '${esc(path.join(CLAUDE_DIR, 'agents'))}/' + name + '.md';
+  fetch('/api/save', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('AGENT DEPLOYED: ' + name); setTimeout(function() { location.reload(); }, 800); }
+    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
+  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+}
+
+function installSuggestMcp(btn, name, configJson) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  var config = JSON.parse(configJson);
+  fetch('/api/settings-update', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-mcp', name: name, config: config }),
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('MCP REGISTERED: ' + name); setTimeout(function() { location.reload(); }, 800); }
+    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
+  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+}
+
+function installSuggestHook(btn, event, matcher, cmd) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  var hook = { type: 'command', command: cmd };
+  fetch('/api/settings-update', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-hook', event: event, matcher: matcher || undefined, hook: hook }),
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('HOOK INSTALLED: ' + event); setTimeout(function() { location.reload(); }, 800); }
+    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
+  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+}
 
 // ═══ CREATE NEW ITEMS ═══
 function toggleCreate(type) {
