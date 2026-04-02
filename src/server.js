@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const PORT = parseInt(process.env.PORT || '3200');
+const PORT = parseInt(process.env.PORT || '3200', 10);
 const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY || process.env.ANTHROPIC_API_KEY;
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
@@ -73,7 +73,8 @@ const server = http.createServer(async (req, res) => {
         const projects = fs.readdirSync(resolved, { withFileTypes: true })
           .filter(e => e.isDirectory() && !e.name.startsWith('.'))
           .map(e => e.name)
-          .sort();
+          .sort()
+          .slice(0, 500);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ projects }));
       } catch(e) {
@@ -99,10 +100,10 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'Can only open files under ~/.claude/' }));
           return;
         }
-        const { execSync } = await import('child_process');
+        const { execFile } = await import('child_process');
         // Use 'open' on macOS, 'xdg-open' on Linux
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
-        execSync(cmd + ' ' + JSON.stringify(resolved));
+        await new Promise((resolve, reject) => execFile(cmd, [resolved], (err) => err ? reject(err) : resolve()));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -198,7 +199,8 @@ const server = http.createServer(async (req, res) => {
         try {
           // Check if the command binary exists
           const cmd = config.command;
-          execSync('which ' + cmd, { stdio: 'pipe', timeout: 2000 });
+          const { execFileSync } = await import('child_process');
+          execFileSync('which', [cmd], { stdio: 'pipe', timeout: 2000 });
 
           // Check if the entry point file exists (for node servers)
           if (config.args && config.args.length > 0) {

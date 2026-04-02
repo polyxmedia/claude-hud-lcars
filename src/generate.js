@@ -117,7 +117,7 @@ function getMcpServers(s) {
           if (!seen.has(name)) { out.push(parseMcpEntry(name, c, '~/.mcp.json')); seen.add(name); }
         }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('Could not parse ~/.mcp.json:', e.message); }
   }
 
   // Add user-specified directories from CLAUDE_HUD_DIRS env var
@@ -146,7 +146,7 @@ function getMcpServers(s) {
               seen.add(name);
             }
           }
-        } catch(e) {}
+        } catch(e) { console.warn('Could not parse ' + mcpFile + ':', e.message); }
       }
     } catch(e) {}
   }
@@ -2210,26 +2210,6 @@ var _origNav = nav;
 nav = function(id, el) { beepNav(); _origNav(id, el); };
 var _origOpen = open_;
 open_ = function(k) { beepOpen(); _origOpen(k); };
-
-// ═══ VOICE OUTPUT (Web Speech API) ═══
-function speak(text) {
-  if (!isToggleOn('voice-toggle')) return;
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  var u = new SpeechSynthesisUtterance(text.slice(0, 500));
-  var voices = speechSynthesis.getVoices();
-  // Prefer a female English voice
-  var preferred = voices.find(function(v){return v.name.includes('Samantha')})
-    || voices.find(function(v){return v.name.includes('Karen')})
-    || voices.find(function(v){return v.name.includes('Victoria')})
-    || voices.find(function(v){return v.name.includes('Fiona')})
-    || voices.find(function(v){return v.lang.startsWith('en') && v.name.toLowerCase().includes('female')})
-    || voices.find(function(v){return v.lang.startsWith('en-')});
-  if (preferred) u.voice = preferred;
-  u.rate = 0.95;
-  u.pitch = 1.1;
-  speechSynthesis.speak(u);
-}
 
 // Pre-load voices
 if (window.speechSynthesis) {
