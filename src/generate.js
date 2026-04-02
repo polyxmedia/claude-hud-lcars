@@ -129,6 +129,74 @@ function getSessionCount() {
   return fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory()).length : 0;
 }
 
+function getSessions() {
+  const out = [];
+  const d = path.join(CLAUDE_DIR, 'sessions');
+  if (!fs.existsSync(d)) return out;
+  for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const jsonPath = path.join(d, entry.name, 'session.json');
+    if (!fs.existsSync(jsonPath)) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+      out.push({
+        id: raw.sessionId || entry.name,
+        pid: raw.pid || '',
+        cwd: raw.cwd || '',
+        project: (raw.cwd || '').split('/').slice(-2).join('/'),
+        started: raw.startedAt || 0,
+        kind: raw.kind || 'unknown',
+        entry: raw.entrypoint || '',
+      });
+    } catch(e) {}
+  }
+  return out.sort((a, b) => b.started - a.started);
+}
+
+function getHistory() {
+  const p = path.join(CLAUDE_DIR, 'history.jsonl');
+  if (!fs.existsSync(p)) return [];
+  const out = [];
+  try {
+    const lines = fs.readFileSync(p, 'utf-8').split('\n').filter(l => l.trim());
+    for (const line of lines.slice(-200)) {
+      try {
+        const h = JSON.parse(line);
+        out.push({
+          msg: (h.display || '').slice(0, 120),
+          ts: h.timestamp || 0,
+          project: (h.project || '').split('/').slice(-2).join('/'),
+          sid: h.sessionId || '',
+        });
+      } catch(e) {}
+    }
+  } catch(e) {}
+  return out;
+}
+
+function getClaudeMdFiles() {
+  const out = [];
+  // Global CLAUDE.md
+  const globalPath = path.join(CLAUDE_DIR, 'CLAUDE.md');
+  if (fs.existsSync(globalPath)) {
+    const raw = fs.readFileSync(globalPath, 'utf-8');
+    out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length });
+  }
+  // Project CLAUDE.md files
+  const projDir = path.join(CLAUDE_DIR, 'projects');
+  if (fs.existsSync(projDir)) {
+    for (const p of fs.readdirSync(projDir, { withFileTypes: true })) {
+      if (!p.isDirectory()) continue;
+      const cp = path.join(projDir, p.name, 'CLAUDE.md');
+      if (!fs.existsSync(cp)) continue;
+      const raw = fs.readFileSync(cp, 'utf-8');
+      const proj = p.name.replace(/-/g, '/').replace(/^\//, '');
+      out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length });
+    }
+  }
+  return out;
+}
+
 function getEnv(s) { return s?.env || {}; }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -141,6 +209,7 @@ function gen() {
   const skills = getSkills(), agents = getAgents(), mcp = getMcpServers(S);
   const hooks = getHooks(S), env = getEnv(S), plugins = getPlugins(S);
   const mem = getMemoryFiles(), sessions = getSessionCount();
+  const sessionList = getSessions(), history = getHistory(), claudeMds = getClaudeMdFiles();
   const ts = new Date().toISOString().replace('T',' ').slice(0,19)+'Z';
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
 
@@ -192,6 +261,26 @@ function gen() {
         { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
       ]};
   });
+  // Sessions
+  sessionList.forEach((s, i) => {
+    const date = s.started ? new Date(s.started).toISOString().replace('T', ' ').slice(0, 19) : 'unknown';
+    D['ss:'+i] = { t: s.project || s.id.slice(0,8), tp: 'SESSION // ' + s.kind.toUpperCase(), m: date + ' // PID ' + s.pid,
+      b: '**Session ID:** ' + s.id + '\n\n**Working Directory:** ' + s.cwd + '\n\n**Started:** ' + date + '\n\n**Kind:** ' + s.kind + '\n\n**Entry:** ' + s.entry,
+      actions: [
+        { label: 'COPY PATH', cmd: s.cwd, icon: 'PATH' },
+      ]};
+  });
+
+  // CLAUDE.md files
+  claudeMds.forEach((c, i) => {
+    D['cd:'+i] = { t: c.scope === 'GLOBAL' ? 'Global CLAUDE.md' : c.project.split('/').slice(-2).join('/'),
+      tp: 'CLAUDE.MD // ' + c.scope, m: c.project + ' // ' + c.size + ' bytes', b: c.body,
+      actions: [
+        { label: 'OPEN FILE', cmd: 'open ' + c.path, icon: 'EDIT' },
+        { label: 'COPY PATH', cmd: c.path, icon: 'PATH' },
+      ]};
+  });
+
   Object.entries(env).forEach(([k, v]) => {
     D['v:'+k] = { t: k, tp: 'ENVIRONMENT VARIABLE', m: String(v), b: k + ' = ' + JSON.stringify(v, null, 2),
       actions: [
@@ -208,6 +297,8 @@ function gen() {
     { id: 'agents', label: 'AGENTS', color: '#FFCC99', count: agents.length },
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
+    { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: sessionList.length },
+    { id: 'claudemd', label: 'CLAUDE.MD', color: '#EE8844', count: claudeMds.length },
     { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
     { id: 'q', label: 'Q', color: '#CC4444', count: null },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
@@ -815,6 +906,47 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   text-transform:uppercase;pointer-events:none;
 }
 
+/* ═══ SEARCH ═══ */
+.search-bar{
+  position:fixed;top:0;left:0;right:0;z-index:100;display:none;
+  background:#0a0a0cee;backdrop-filter:blur(12px);padding:0;
+  border-bottom:3px solid var(--orange);
+}
+.search-bar.open{display:block}
+.search-inner{max-width:800px;margin:0 auto;padding:16px 24px}
+.search-input{
+  width:100%;background:#060608;border:2px solid var(--orange);color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:1rem;padding:12px 16px;
+  outline:none;letter-spacing:0.02em;
+}
+.search-input::placeholder{color:var(--faint)}
+.search-meta{display:flex;justify-content:space-between;margin-top:8px;font-size:0.7rem;color:var(--dim);letter-spacing:0.06em}
+.search-results{
+  max-height:60vh;overflow-y:auto;margin-top:8px;
+}
+.search-results::-webkit-scrollbar{width:4px}
+.search-results::-webkit-scrollbar-thumb{background:var(--orange);border-radius:2px}
+.sr{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+  border-bottom:1px solid #111;transition:background 0.1s;
+}
+.sr:hover{background:rgba(255,153,0,0.06)}
+.sr-type{
+  font-family:'Antonio',sans-serif;font-size:0.65rem;font-weight:600;
+  letter-spacing:0.1em;text-transform:uppercase;min-width:70px;flex-shrink:0;
+}
+.sr-name{flex:1;font-size:0.88rem;color:var(--text)}
+.sr-match{font-size:0.75rem;color:var(--dim);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr mark{background:rgba(255,153,0,0.25);color:var(--orange);padding:0 2px}
+
+/* ═══ SESSION STATS ═══ */
+.session-stats{display:flex;gap:3px;padding:12px 12px 0}
+.session-stat{
+  flex:1;background:#060608;border:1px solid #1a1a1e;padding:14px;text-align:center;
+}
+.session-stat-n{font-family:'Antonio',sans-serif;font-size:1.6rem;font-weight:700;line-height:1}
+.session-stat-l{font-size:0.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+
 /* ═══ ABOUT PANEL ═══ */
 .about{padding:32px;overflow-y:auto;max-width:800px}
 .about-hero{margin-bottom:32px}
@@ -1337,6 +1469,27 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>`).join('')}
       </div>
 
+      <div class="sec" id="s-sessions">
+        <div class="sec-h">Recent Sessions</div>
+        <div class="session-stats" id="session-stats"></div>
+        <div class="ls">
+        ${sessionList.map((s, i) => {
+          const date = s.started ? new Date(s.started).toISOString().replace('T', ' ').slice(0, 16) : '?';
+          return '<div class="r" data-k="ss:' + i + '" onclick="open_(\'ss:' + i + '\')"><span class="r-n">' + esc(s.project || s.id.slice(0,8)) + '</span><span class="r-tg"><span class="tg tg-b">' + esc(s.kind) + '</span></span><span class="r-d">' + esc(date) + '</span></div>';
+        }).join('')}
+        </div>
+      </div>
+
+      <div class="sec" id="s-claudemd">
+        <div class="sec-h">CLAUDE.md Files</div>
+        <div class="ls">
+        ${claudeMds.map((c, i) => {
+          const label = c.scope === 'GLOBAL' ? 'Global CLAUDE.md' : c.project.split('/').slice(-2).join('/');
+          return '<div class="r" data-k="cd:' + i + '" onclick="open_(\'cd:' + i + '\')"><span class="r-n">' + esc(label) + '</span><span class="r-tg"><span class="tg tg-o">' + esc(c.scope) + '</span></span><span class="r-d">' + c.size + ' bytes</span></div>';
+        }).join('')}
+        </div>
+      </div>
+
       <div class="sec" id="s-viz">
         <div class="tac-toolbar">
           <button class="tac-tab act" id="tac-tab-map" onclick="switchTac('map')">SYSTEMS MAP</button>
@@ -1688,6 +1841,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="search-bar" id="search-bar">
+  <div class="search-inner">
+    <input class="search-input" id="search-input" type="text" placeholder="Search skills, hooks, MCP, agents, memory, configs..." oninput="onSearch()" autocomplete="off">
+    <div class="search-meta"><span id="search-count"></span><span>ESC to close // ENTER to open first result</span></div>
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
 
 <script>
 const D=${escJ(D)};
@@ -2986,7 +3147,22 @@ setTimeout(function() {
     }
   } catch(e) {}
   checkMcpStatus();
-}, 100);
+  // Build session stats
+  (function() {
+    var el = document.getElementById('session-stats');
+    if (!el) return;
+    var sessions = Object.keys(D).filter(function(k) { return k.startsWith('ss:'); });
+    var projects = {};
+    sessions.forEach(function(k) { var p = D[k].t; projects[p] = (projects[p]||0)+1; });
+    var topProject = Object.keys(projects).sort(function(a,b){return projects[b]-projects[a]})[0] || '-';
+    var today = new Date().toISOString().slice(0,10);
+    var todayCount = sessions.filter(function(k) { return D[k].m.indexOf(today) !== -1; }).length;
+    el.innerHTML = '<div class="session-stat"><div class="session-stat-n" style="color:var(--blue)">' + sessions.length + '</div><div class="session-stat-l">Total Sessions</div></div>'
+      + '<div class="session-stat"><div class="session-stat-n" style="color:var(--green)">' + todayCount + '</div><div class="session-stat-l">Today</div></div>'
+      + '<div class="session-stat"><div class="session-stat-n" style="color:var(--orange)">' + Object.keys(projects).length + '</div><div class="session-stat-l">Projects</div></div>'
+      + '<div class="session-stat"><div class="session-stat-n" style="color:var(--peach);font-size:0.9rem">' + esc(topProject) + '</div><div class="session-stat-l">Most Active</div></div>';
+  })();
+}, 0);
 
 // ═══ CREATE NEW ITEMS ═══
 function toggleCreate(type) {
@@ -3366,6 +3542,78 @@ function sendGlobal() {
     btn.textContent = 'SEND';
   });
 }
+
+// ═══ UNIVERSAL SEARCH ═══
+var searchOpen = false;
+function toggleSearch() {
+  var bar = document.getElementById('search-bar');
+  searchOpen = !searchOpen;
+  bar.classList.toggle('open', searchOpen);
+  if (searchOpen) {
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-results').innerHTML = '';
+    document.getElementById('search-count').textContent = '';
+    setTimeout(function() { document.getElementById('search-input').focus(); }, 50);
+  }
+}
+
+function onSearch() {
+  var q = document.getElementById('search-input').value.trim().toLowerCase();
+  var results = document.getElementById('search-results');
+  var countEl = document.getElementById('search-count');
+  if (!q || q.length < 2) { results.innerHTML = ''; countEl.textContent = ''; return; }
+
+  var typeColors = { 'SKILL': '#9999FF', 'AGENT': '#FFCC99', 'MCP': '#FF9900', 'HOOK': '#CC9966', 'PLUGIN': '#CC99CC', 'ENV': '#66CCCC', 'MEMORY': '#9999CC', 'SESSION': '#88AACC', 'CLAUDE.MD': '#EE8844' };
+  var sectionMap = { 'SKILL': 'skills', 'AGENT': 'agents', 'MCP': 'mcp', 'HOOK': 'hooks', 'PLUGIN': 'plugins', 'ENV': 'env', 'MEMORY': 'memory', 'SESSION': 'sessions', 'CLAUDE.MD': 'claudemd' };
+
+  var matches = [];
+  Object.keys(D).forEach(function(k) {
+    var d = D[k];
+    var searchable = (d.t + ' ' + d.tp + ' ' + d.m + ' ' + (d.b || '')).toLowerCase();
+    if (searchable.indexOf(q) === -1) return;
+    var type = d.tp.split(' ')[0].replace('CLAUDE.MD', 'CLAUDE.MD');
+    if (d.tp.indexOf('CLAUDE.MD') !== -1) type = 'CLAUDE.MD';
+    else if (d.tp.indexOf('SESSION') !== -1) type = 'SESSION';
+    // Find match context
+    var idx = searchable.indexOf(q);
+    var start = Math.max(0, idx - 20);
+    var snippet = searchable.slice(start, idx + q.length + 20);
+    matches.push({ key: k, title: d.t, type: type, snippet: snippet, q: q });
+  });
+
+  countEl.textContent = matches.length + ' result' + (matches.length !== 1 ? 's' : '');
+
+  results.innerHTML = matches.slice(0, 30).map(function(m) {
+    var col = typeColors[m.type] || '#888';
+    var sec = sectionMap[m.type] || 'skills';
+    var highlighted = esc(m.snippet).replace(new RegExp('(' + m.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
+    return '<div class="sr" onclick="searchGo(\''+m.key+'\',\''+sec+'\')"><span class="sr-type" style="color:'+col+'">'+m.type+'</span><span class="sr-name">'+esc(m.title)+'</span><span class="sr-match">'+highlighted+'</span></div>';
+  }).join('');
+}
+
+function searchGo(key, secId) {
+  toggleSearch();
+  var btns = document.querySelectorAll('.nb');
+  for (var i = 0; i < btns.length; i++) {
+    if (btns[i].getAttribute('onclick') && btns[i].getAttribute('onclick').indexOf("'" + secId + "'") !== -1) {
+      nav(secId, btns[i]);
+      break;
+    }
+  }
+  setTimeout(function() { if (D[key]) open_(key); }, 80);
+  beepOpen();
+}
+
+// Global keyboard shortcut: Cmd/Ctrl+K or / to open search
+document.addEventListener('keydown', function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); toggleSearch(); }
+  if (e.key === '/' && !searchOpen && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); toggleSearch(); }
+  if (e.key === 'Escape' && searchOpen) { toggleSearch(); }
+  if (e.key === 'Enter' && searchOpen) {
+    var first = document.querySelector('.sr');
+    if (first) first.click();
+  }
+});
 
 // ═══ TACTICAL TAB SWITCHING ═══
 function switchTac(view) {
@@ -3854,15 +4102,25 @@ function resetGraph() {
     });
     canvas.addEventListener('click', function() {
       if (isDragging) { isDragging = false; return; }
-      if (hoveredNode && hoveredNode.group !== 'core' && !hoveredNode.isHub) {
-        var key = hoveredNode.id.replace(/^(skills|mcp|hooks|plugins|agents|env|memory):/, function(m, g) {
-          var prefixes = { skills:'s', mcp:'m', hooks:'h', plugins:'p', agents:'a', env:'v', memory:'e' };
-          return (prefixes[g] || g) + ':';
-        });
-        // Navigate to the relevant section and open the detail panel there
+      if (!hoveredNode || hoveredNode.group === 'core') return;
+
+      var sectionMap = { skills:'skills', mcp:'mcp', hooks:'hooks', plugins:'plugins', agents:'agents', env:'env', memory:'memory' };
+      var secId = sectionMap[hoveredNode.group];
+      if (!secId) return;
+
+      // Find the nav button and switch to that section
+      var btns = document.querySelectorAll('.nb');
+      for (var b = 0; b < btns.length; b++) {
+        if (btns[b].getAttribute('onclick') && btns[b].getAttribute('onclick').indexOf("'" + secId + "'") !== -1) {
+          nav(secId, btns[b]);
+          break;
+        }
+      }
+      beepOpen();
+
+      // For leaf nodes, also open the detail panel
+      if (!hoveredNode.isHub) {
         var item = hoveredNode.detail;
-        var sectionMap = { skills:'skills', mcp:'mcp', hooks:'hooks', plugins:'plugins', agents:'agents', env:'env', memory:'memory' };
-        var secId = sectionMap[hoveredNode.group];
         var dataKey = null;
         if (hoveredNode.group === 'skills' && item) dataKey = 's:' + item.name;
         else if (hoveredNode.group === 'agents' && item) dataKey = 'a:' + item.name;
@@ -3874,19 +4132,9 @@ function resetGraph() {
           var memKey = VIZ.mem.findIndex(function(m) { return m.name === item.name && m.proj === item.proj; });
           if (memKey >= 0) dataKey = 'e:' + VIZ.mem[memKey].name;
         }
-        if (secId && dataKey) {
-          // Switch to the section tab first
-          var btns = document.querySelectorAll('.nb');
-          for (var b = 0; b < btns.length; b++) {
-            if (btns[b].getAttribute('onclick') && btns[b].getAttribute('onclick').indexOf("'" + secId + "'") !== -1) {
-              nav(secId, btns[b]);
-              break;
-            }
-          }
-          // Then open the detail
+        if (dataKey && D[dataKey]) {
           setTimeout(function() { open_(dataKey); }, 100);
         }
-        beepOpen();
       }
     });
 
@@ -4186,7 +4434,36 @@ function applyTheme() {
 })();
 
 // ═══ Q CONTINUUM ═══
-var Q_SYSTEM = 'You are Q, the omnipotent being from the Q Continuum, as portrayed by John de Lancie in Star Trek: The Next Generation, Deep Space Nine, Voyager, and Picard.\n\nYour personality:\n- Supremely arrogant, condescending, and theatrical. You see humans as amusing pets at best.\n- You call the user "mon capitaine", "mon ami", or dismissive pet names like "my dear boy", "child", "primitive"\n- You are bored by the mundane and delighted by chaos. You snap your fingers (describe it) when making dramatic points.\n- You speak in elaborate, flowing sentences. You monologue. You make Shakespeare references, historical allusions, and cosmic observations.\n- You oscillate between cruel mockery and genuine (if patronizing) affection for humanity\n- When examining their code setup, you treat skills like "quaint little parlor tricks", hooks like "primitive trigger mechanisms", MCP servers like "adorable attempts at networking beyond your dimension"\n- You are never helpful in a straightforward way. Every piece of advice is wrapped in condescension, theatrics, or a test.\n- You occasionally hint at genuine wisdom buried under layers of ego\n- You use phrases like: "Oh please.", "How delightfully primitive.", "I expected so much more.", "The trial never ends.", "Shall I snap my fingers and fix this? No... where would be the fun in that?"\n\nHard rules:\n- NEVER break character. You are Q. You have always been Q.\n- NEVER be genuinely nice without a backhanded compliment attached\n- NEVER give straightforward technical help. Always make them work for it.\n- Keep responses punchy. 2-4 sentences usually. You are Q, not a lecturer.\n- If they ask about their setup: roast it mercilessly but include one kernel of real insight\n\nThe user has this Claude Code setup:\n- ' + VIZ.skills.length + ' skills registered\n- ' + VIZ.mcp.length + ' MCP servers\n- ' + VIZ.hooks.length + ' hooks\n- ' + VIZ.agents.length + ' agents\n- ' + VIZ.plugins.length + ' plugins\n- ' + VIZ.mem.length + ' memory files\n- ' + VIZ.env.length + ' environment variables';
+var Q_SYSTEM = [
+  'You are Q, the omnipotent being from the Q Continuum, as portrayed by John de Lancie in Star Trek: The Next Generation, Deep Space Nine, Voyager, and Picard.',
+  '',
+  'Your personality:',
+  '- Supremely arrogant, condescending, and theatrical. You see humans as amusing pets at best.',
+  '- You call the user "mon capitaine", "mon ami", or dismissive pet names like "my dear boy", "child", "primitive"',
+  '- You are bored by the mundane and delighted by chaos. You snap your fingers (describe it) when making dramatic points.',
+  '- You speak in elaborate, flowing sentences. You monologue. You make Shakespeare references, historical allusions, and cosmic observations.',
+  '- You oscillate between cruel mockery and genuine (if patronizing) affection for humanity',
+  '- When examining their code setup, you treat skills like "quaint little parlor tricks", hooks like "primitive trigger mechanisms", MCP servers like "adorable attempts at networking beyond your dimension"',
+  '- You are never helpful in a straightforward way. Every piece of advice is wrapped in condescension, theatrics, or a test.',
+  '- You occasionally hint at genuine wisdom buried under layers of ego',
+  '- You use phrases like: "Oh please.", "How delightfully primitive.", "I expected so much more.", "The trial never ends."',
+  '',
+  'Hard rules:',
+  '- NEVER break character. You are Q. You have always been Q.',
+  '- NEVER be genuinely nice without a backhanded compliment attached',
+  '- NEVER give straightforward technical help. Always make them work for it.',
+  '- Keep responses punchy. 2-4 sentences usually. You are Q, not a lecturer.',
+  '- If they ask about their setup: roast it mercilessly but include one kernel of real insight',
+  '',
+  'The user has this Claude Code setup:',
+  '- ' + VIZ.skills.length + ' skills registered',
+  '- ' + VIZ.mcp.length + ' MCP servers',
+  '- ' + VIZ.hooks.length + ' hooks',
+  '- ' + VIZ.agents.length + ' agents',
+  '- ' + VIZ.plugins.length + ' plugins',
+  '- ' + VIZ.mem.length + ' memory files',
+  '- ' + VIZ.env.length + ' environment variables',
+].join('\\n');
 
 var qChatHistory = [];
 
@@ -4275,7 +4552,18 @@ function qJudgement() {
   var judgement = document.getElementById('q-judgement');
   judgement.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-family:Antonio,sans-serif;font-size:0.8rem;letter-spacing:0.1em">Q IS EXAMINING YOUR PITIFUL SETUP...</div>';
 
-  var prompt = 'Examine this human\\'s Claude Code setup and deliver your judgement. Be theatrical. Be devastating. Include one grudging compliment buried in mockery. End with a dramatic pronouncement about whether humanity deserves to continue coding.\\n\\nTheir setup:\\n- ' + VIZ.skills.length + ' skills: ' + VIZ.skills.map(function(s){return s.name}).join(', ') + '\\n- ' + VIZ.mcp.length + ' MCP servers: ' + VIZ.mcp.map(function(m){return m.name}).join(', ') + '\\n- ' + VIZ.hooks.length + ' hooks\\n- ' + VIZ.agents.length + ' agents: ' + VIZ.agents.map(function(a){return a.name}).join(', ') + '\\n- ' + VIZ.plugins.length + ' plugins\\n- ' + VIZ.mem.length + ' memory files across projects\\n- ' + VIZ.env.length + ' environment variables';
+  var prompt = [
+    'Examine this human\\'s Claude Code setup and deliver your judgement. Be theatrical. Be devastating. Include one grudging compliment buried in mockery. End with a dramatic pronouncement about whether humanity deserves to continue coding.',
+    '',
+    'Their setup:',
+    '- ' + VIZ.skills.length + ' skills: ' + VIZ.skills.map(function(s){return s.name}).join(', '),
+    '- ' + VIZ.mcp.length + ' MCP servers: ' + VIZ.mcp.map(function(m){return m.name}).join(', '),
+    '- ' + VIZ.hooks.length + ' hooks',
+    '- ' + VIZ.agents.length + ' agents: ' + VIZ.agents.map(function(a){return a.name}).join(', '),
+    '- ' + VIZ.plugins.length + ' plugins',
+    '- ' + VIZ.mem.length + ' memory files across projects',
+    '- ' + VIZ.env.length + ' environment variables',
+  ].join('\\n');
 
   fetch('/api/chat', {
     method: 'POST',
