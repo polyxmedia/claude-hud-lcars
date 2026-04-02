@@ -1828,21 +1828,21 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             <div class="cfg-section-head">Chat Model</div>
             <div class="cfg-section-body">
               <div class="cfg-row">
-                <span class="cfg-label">Model</span>
+                <span class="cfg-label">Chat model</span>
                 <span class="cfg-desc">Which Claude model the COMPUTER bar talks to.</span>
                 <span class="cfg-input">
                   <div class="lcars-select" id="cfg-model-wrap">
-                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-model-wrap')"><span>Claude Haiku 4.5</span></button>
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-model-wrap')"><span>Claude Sonnet 4.6</span></button>
                     <div class="lcars-dropdown">
                       <div class="lcars-option" data-value="claude-opus-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Opus 4.6</span>
                         <span class="opt-sub">Most capable. Deep reasoning, complex tasks.</span>
                       </div>
-                      <div class="lcars-option" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                      <div class="lcars-option selected" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Sonnet 4.6</span>
                         <span class="opt-sub">Fast and capable. Best balance of speed and quality.</span>
                       </div>
-                      <div class="lcars-option selected" data-value="claude-haiku-4-5-20251001" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                      <div class="lcars-option" data-value="claude-haiku-4-5-20251001" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Haiku 4.5</span>
                         <span class="opt-sub">Fastest. Instant responses, lowest cost.</span>
                       </div>
@@ -1850,7 +1850,30 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                   </div>
                 </span>
               </div>
-              <p class="cfg-note">Model change takes effect on the next message. No server restart needed.</p>
+              <div class="cfg-row">
+                <span class="cfg-label">Discover model</span>
+                <span class="cfg-desc">Model used to generate personalised setup suggestions. Opus gives much better results.</span>
+                <span class="cfg-input">
+                  <div class="lcars-select" id="cfg-discover-model-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-discover-model-wrap')"><span>Claude Opus 4.6</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option selected" data-value="claude-opus-4-6" onclick="selectLcarsOption('cfg-discover-model-wrap',this);saveConfig()">
+                        <span class="opt-label">Claude Opus 4.6</span>
+                        <span class="opt-sub">Best suggestions. Recommended.</span>
+                      </div>
+                      <div class="lcars-option" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-discover-model-wrap',this);saveConfig()">
+                        <span class="opt-label">Claude Sonnet 4.6</span>
+                        <span class="opt-sub">Good suggestions, lower cost.</span>
+                      </div>
+                      <div class="lcars-option" data-value="claude-haiku-4-5-20251001" onclick="selectLcarsOption('cfg-discover-model-wrap',this);saveConfig()">
+                        <span class="opt-label">Claude Haiku 4.5</span>
+                        <span class="opt-sub">Fastest, cheapest — lower quality suggestions.</span>
+                      </div>
+                    </div>
+                  </div>
+                </span>
+              </div>
+              <p class="cfg-note">Model changes take effect on the next message. No server restart needed.</p>
             </div>
           </div>
 
@@ -3058,6 +3081,10 @@ function loadConfig() {
       setLcarsValue('cfg-model-wrap', cfg.model);
       window.HUD_MODEL = cfg.model;
     }
+    if (cfg.discoverModel) {
+      setLcarsValue('cfg-discover-model-wrap', cfg.discoverModel);
+    }
+    window.HUD_DISCOVER_MODEL = cfg.discoverModel || 'claude-opus-4-6';
     if (cfg.sfx === 'off') {
       setLcarsValue('cfg-sfx-wrap', 'off');
       onSfxChange();
@@ -3104,7 +3131,8 @@ function saveConfig() {
     elevenKey: document.getElementById('cfg-eleven-key').value,
     elevenVoice: document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL',
     sfx: getLcarsValue('cfg-sfx-wrap'),
-    model: getLcarsValue('cfg-model-wrap') || 'claude-haiku-4-5-20251001',
+    model: getLcarsValue('cfg-model-wrap') || 'claude-sonnet-4-6',
+    discoverModel: getLcarsValue('cfg-discover-model-wrap') || 'claude-opus-4-6',
     shipName: (document.getElementById('cfg-ship-name') || {}).value || '',
     shipReg: (document.getElementById('cfg-ship-reg') || {}).value || '',
     projectsDir: (document.getElementById('cfg-projects-dir') || {}).value || '',
@@ -3852,7 +3880,7 @@ function sendGlobal() {
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001', systemExtra: systemExtra }),
+    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-sonnet-4-6', systemExtra: systemExtra }),
   }).then(function(res) {
     if (!res.ok) {
       return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
@@ -4900,7 +4928,7 @@ function sendToQ() {
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: qChatHistory, system: Q_SYSTEM, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001' }),
+    body: JSON.stringify({ messages: qChatHistory, system: Q_SYSTEM, model: window.HUD_MODEL || 'claude-sonnet-4-6' }),
   }).then(function(res) {
     if (!res.ok) throw new Error('Q is displeased');
     var reader = res.body.getReader();
@@ -4974,7 +5002,7 @@ function qJudgement() {
     body: JSON.stringify({
       messages: [{ role: 'user', content: prompt }],
       system: Q_SYSTEM,
-      model: window.HUD_MODEL || 'claude-haiku-4-5-20251001',
+      model: window.HUD_MODEL || 'claude-sonnet-4-6',
     }),
   }).then(function(res) {
     if (!res.ok) throw new Error('Q vanished');

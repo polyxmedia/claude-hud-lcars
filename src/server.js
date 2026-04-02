@@ -59,7 +59,7 @@ function solidPng(size, r, g, b) {
 const PORT = parseInt(process.env.PORT || '3200', 10);
 const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY || process.env.ANTHROPIC_API_KEY;
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
+const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // "Sarah" - clear, professional female
 
