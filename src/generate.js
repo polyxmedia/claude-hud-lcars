@@ -2895,6 +2895,12 @@ function loadConfig() {
       var pd = document.getElementById('cfg-projects-dir');
       if (pd) pd.value = cfg.projectsDir;
       window.HUD_PROJECTS_DIR = cfg.projectsDir;
+      if (window.HUD_LIVE) {
+        fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir: cfg.projectsDir }) })
+          .then(function(r) { return r.json(); })
+          .then(function(d) { window.HUD_PROJECTS_CACHE = d.projects ? d.projects.join(', ') : ''; })
+          .catch(function() {});
+      }
     }
     if (cfg.theme) {
       setLcarsValue('cfg-theme-wrap', cfg.theme);
@@ -3598,15 +3604,17 @@ function sendGlobal() {
   var activeBlockIdx = -1;
   var seenEvents = {};
 
-  function doChat(extraContext) {
-    var systemExtra = extraContext ? '\n\nActive missions (projects in ' + window.HUD_PROJECTS_DIR + '):\n' + extraContext : '';
-    fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001', systemExtra: systemExtra }),
-    }).then(function(res) {
-      if (!res.ok) {
-        return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
+  var systemExtra = (window.HUD_PROJECTS_DIR && window.HUD_PROJECTS_CACHE)
+    ? ' Active missions (projects in ' + window.HUD_PROJECTS_DIR + '): ' + window.HUD_PROJECTS_CACHE
+    : '';
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001', systemExtra: systemExtra }),
+  }).then(function(res) {
+    if (!res.ok) {
+      return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
     }
 
     var reader = res.body.getReader();
@@ -3638,14 +3646,12 @@ function sendGlobal() {
             try {
               var evt = JSON.parse(data);
               if (evt.type === 'message_stop' || evt.type === 'message_start') continue;
-              // Track which content block we're in - only accept text from the first one
               if (evt.type === 'content_block_start') {
                 if (activeBlockIdx === -1) activeBlockIdx = evt.index;
                 continue;
               }
               if (evt.type === 'content_block_stop') continue;
               if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
-                // Deduplicate: skip if we've seen this exact data line before
                 if (seenEvents[data]) continue;
                 seenEvents[data] = true;
                 fullText += evt.delta.text;
@@ -3675,19 +3681,6 @@ function sendGlobal() {
     btn.disabled = false;
     btn.textContent = 'SEND';
   });
-  }
-
-  if (window.HUD_LIVE && window.HUD_PROJECTS_DIR) {
-    fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dir: window.HUD_PROJECTS_DIR }),
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      doChat(d.projects ? d.projects.join(', ') : '');
-    }).catch(function() { doChat(''); });
-  } else {
-    doChat('');
-  }
 }
 
 // ═══ UNIVERSAL SEARCH ═══
@@ -4448,6 +4441,12 @@ function onProjectsDirChange() {
   var val = (document.getElementById('cfg-projects-dir') || {}).value || '';
   window.HUD_PROJECTS_DIR = val;
   saveConfig();
+  if (val && window.HUD_LIVE) {
+    fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir: val }) })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { window.HUD_PROJECTS_CACHE = d.projects ? d.projects.join(', ') : ''; })
+      .catch(function() {});
+  }
 }
 
 function applyShipName() {
