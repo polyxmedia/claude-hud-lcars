@@ -14,22 +14,7 @@ function rimraf(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// Redirect CLAUDE_DIR to a temp directory so tests never touch ~/.claude
-function withFakeClaudeDir(fn) {
-  const tmp = makeTmpDir();
-  const orig = process.env.CLAUDE_DIR_OVERRIDE;
-  process.env.CLAUDE_DIR_OVERRIDE = tmp;
-  try {
-    return fn(tmp);
-  } finally {
-    process.env.CLAUDE_DIR_OVERRIDE = orig ?? '';
-    rimraf(tmp);
-  }
-}
-
-// Dynamically import the functions we want to test.
-// generate.js exports nothing by default, so we inline the logic under test.
-// These are self-contained pure functions we can copy for unit testing.
+// ── inlined functions under test (sourced from generate.js) ──────────────────
 
 function getSkills(claudeDir) {
   const dir = path.join(claudeDir, 'skills');
@@ -93,16 +78,66 @@ function getMemoryFiles(claudeDir) {
   return out;
 }
 
-// ── tests ─────────────────────────────────────────────────────────────────────
+function parseMcpEntry(name, c, source) {
+  let serverType = 'unknown';
+  const mainArg = (c.args || []).slice(-1)[0] || '';
+  if (c.command === 'node') serverType = 'node';
+  else if (c.command === 'uvx' || c.command === 'uv') serverType = 'python';
+  else if (c.command === 'npx') serverType = 'npx';
+  else if (c.command === 'docker') serverType = 'docker';
+
+  let fileStatus = 'unknown';
+  if (mainArg.endsWith('.js') || mainArg.endsWith('.mjs') || mainArg.endsWith('.py')) {
+    fileStatus = fs.existsSync(mainArg) ? 'found' : 'missing';
+  }
+
+  const envCount = c.env ? Object.keys(c.env).length : 0;
+  return {
+    name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
+    serverType, fileStatus, envCount, source,
+    entryPoint: mainArg,
+    config: { ...c, env: c.env ? '{redacted — ' + envCount + ' vars}' : undefined },
+  };
+}
+
+function getHooks(s) {
+  if (!s?.hooks) return [];
+  const out = [];
+  for (const [ev, ms] of Object.entries(s.hooks)) {
+    if (!Array.isArray(ms)) continue;
+    for (const m of ms) {
+      if (!m.hooks) continue;
+      for (const h of m.hooks) {
+        out.push({ ev, matcher: m.matcher || '*', type: h.type,
+          cmd: h.command || h.prompt || h.url || '',
+          async: h.async || h.asyncRewake || false, full: h });
+      }
+    }
+  }
+  return out;
+}
+
+function getPlugins(s) {
+  if (!s?.enabledPlugins) return [];
+  return Object.entries(s.enabledPlugins).map(([id, en]) => ({ id, on: !!en }));
+}
+
+function getEnv(s) { return s?.env || {}; }
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escJ(s) {
+  return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/`/g,'\\u0060').replace(/\$/g,'\\u0024');
+}
+
+// ── getSkills ─────────────────────────────────────────────────────────────────
 
 describe('getSkills', () => {
   test('returns empty array when skills dir does not exist', () => {
     const tmp = makeTmpDir();
-    try {
-      assert.deepEqual(getSkills(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    try { assert.deepEqual(getSkills(tmp), []); } finally { rimraf(tmp); }
   });
 
   test('returns empty array when skills dir is empty', () => {
@@ -110,62 +145,55 @@ describe('getSkills', () => {
     try {
       fs.mkdirSync(path.join(tmp, 'skills'));
       assert.deepEqual(getSkills(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
   });
 
   test('parses a valid skill with frontmatter', () => {
     const tmp = makeTmpDir();
     try {
-      const skillDir = path.join(tmp, 'skills', 'my-skill');
-      fs.mkdirSync(skillDir, { recursive: true });
-      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), [
-        '---',
-        'name: my-skill',
-        'description: Does something useful',
-        'version: 1.0.0',
-        'context: fork',
-        '---',
-        '',
-        '# My Skill body',
-      ].join('\n'));
+      const d = path.join(tmp, 'skills', 'my-skill');
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, 'SKILL.md'), '---\nname: my-skill\ndescription: Does something useful\nversion: 1.0.0\ncontext: fork\n---\n\n# Body');
       const skills = getSkills(tmp);
       assert.equal(skills.length, 1);
       assert.equal(skills[0].name, 'my-skill');
       assert.equal(skills[0].desc, 'Does something useful');
       assert.equal(skills[0].ver, '1.0.0');
       assert.equal(skills[0].ctx, 'fork');
-      assert.ok(skills[0].body.includes('# My Skill body'));
-    } finally {
-      rimraf(tmp);
-    }
+      assert.ok(skills[0].body.includes('# Body'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('strips frontmatter from body', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'skills', 'clean');
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, 'SKILL.md'), '---\nname: clean\n---\n\nJust the body.');
+      const skills = getSkills(tmp);
+      assert.ok(!skills[0].body.includes('---'));
+      assert.ok(skills[0].body.includes('Just the body.'));
+    } finally { rimraf(tmp); }
   });
 
   test('skips skill directory with no SKILL.md', () => {
     const tmp = makeTmpDir();
     try {
-      fs.mkdirSync(path.join(tmp, 'skills', 'no-skill-file'), { recursive: true });
+      fs.mkdirSync(path.join(tmp, 'skills', 'empty'), { recursive: true });
       assert.deepEqual(getSkills(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
   });
 
   test('skips unreadable SKILL.md without crashing', () => {
     const tmp = makeTmpDir();
     try {
-      const skillDir = path.join(tmp, 'skills', 'bad-skill');
-      fs.mkdirSync(skillDir, { recursive: true });
-      const f = path.join(skillDir, 'SKILL.md');
+      const d = path.join(tmp, 'skills', 'bad');
+      fs.mkdirSync(d, { recursive: true });
+      const f = path.join(d, 'SKILL.md');
       fs.writeFileSync(f, 'content');
       fs.chmodSync(f, 0o000);
-      // Should not throw
-      const skills = getSkills(tmp);
-      assert.deepEqual(skills, []);
-    } finally {
-      rimraf(tmp);
-    }
+      assert.deepEqual(getSkills(tmp), []);
+    } finally { rimraf(tmp); }
   });
 
   test('returns skills sorted alphabetically', () => {
@@ -176,11 +204,8 @@ describe('getSkills', () => {
         fs.mkdirSync(d, { recursive: true });
         fs.writeFileSync(path.join(d, 'SKILL.md'), `---\nname: ${name}\n---\n`);
       }
-      const skills = getSkills(tmp);
-      assert.deepEqual(skills.map(s => s.name), ['apple', 'mango', 'zebra']);
-    } finally {
-      rimraf(tmp);
-    }
+      assert.deepEqual(getSkills(tmp).map(s => s.name), ['apple', 'mango', 'zebra']);
+    } finally { rimraf(tmp); }
   });
 
   test('falls back to directory name when frontmatter has no name', () => {
@@ -188,44 +213,42 @@ describe('getSkills', () => {
     try {
       const d = path.join(tmp, 'skills', 'dir-name');
       fs.mkdirSync(d, { recursive: true });
-      fs.writeFileSync(path.join(d, 'SKILL.md'), '# No frontmatter here\n');
-      const skills = getSkills(tmp);
-      assert.equal(skills[0].name, 'dir-name');
-    } finally {
-      rimraf(tmp);
-    }
+      fs.writeFileSync(path.join(d, 'SKILL.md'), '# No frontmatter\n');
+      assert.equal(getSkills(tmp)[0].name, 'dir-name');
+    } finally { rimraf(tmp); }
+  });
+
+  test('truncates description to 200 chars', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'skills', 'long');
+      fs.mkdirSync(d, { recursive: true });
+      const longDesc = 'x'.repeat(300);
+      fs.writeFileSync(path.join(d, 'SKILL.md'), `---\nname: long\ndescription: ${longDesc}\n---\n`);
+      assert.equal(getSkills(tmp)[0].desc.length, 200);
+    } finally { rimraf(tmp); }
   });
 });
+
+// ── getAgents ─────────────────────────────────────────────────────────────────
 
 describe('getAgents', () => {
   test('returns empty array when agents dir does not exist', () => {
     const tmp = makeTmpDir();
-    try {
-      assert.deepEqual(getAgents(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    try { assert.deepEqual(getAgents(tmp), []); } finally { rimraf(tmp); }
   });
 
   test('parses agent files', () => {
     const tmp = makeTmpDir();
     try {
       fs.mkdirSync(path.join(tmp, 'agents'), { recursive: true });
-      fs.writeFileSync(path.join(tmp, 'agents', 'my-agent.md'), [
-        '---',
-        'description: A test agent',
-        '---',
-        '',
-        'Agent body here.',
-      ].join('\n'));
+      fs.writeFileSync(path.join(tmp, 'agents', 'my-agent.md'), '---\ndescription: A test agent\n---\n\nAgent body.');
       const agents = getAgents(tmp);
       assert.equal(agents.length, 1);
       assert.equal(agents[0].name, 'my-agent');
       assert.equal(agents[0].desc, 'A test agent');
-      assert.ok(agents[0].body.includes('Agent body here.'));
-    } finally {
-      rimraf(tmp);
-    }
+      assert.ok(agents[0].body.includes('Agent body.'));
+    } finally { rimraf(tmp); }
   });
 
   test('ignores non-.md files in agents dir', () => {
@@ -234,9 +257,18 @@ describe('getAgents', () => {
       fs.mkdirSync(path.join(tmp, 'agents'), { recursive: true });
       fs.writeFileSync(path.join(tmp, 'agents', 'readme.txt'), 'ignore me');
       assert.deepEqual(getAgents(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
+  });
+
+  test('handles agent with no description gracefully', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(tmp, 'agents'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'agents', 'nodesc.md'), '# Just a title\n\nBody text.');
+      const agents = getAgents(tmp);
+      assert.equal(agents[0].desc, '');
+      assert.ok(agents[0].body.includes('Body text.'));
+    } finally { rimraf(tmp); }
   });
 
   test('skips unreadable agent files without crashing', () => {
@@ -247,30 +279,35 @@ describe('getAgents', () => {
       fs.writeFileSync(f, 'content');
       fs.chmodSync(f, 0o000);
       assert.doesNotThrow(() => getAgents(tmp));
-    } finally {
-      rimraf(tmp);
-    }
+      assert.deepEqual(getAgents(tmp), []);
+    } finally { rimraf(tmp); }
+  });
+
+  test('parses multiple agents', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(tmp, 'agents'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'agents', 'alpha.md'), '---\ndescription: Alpha\n---\n');
+      fs.writeFileSync(path.join(tmp, 'agents', 'beta.md'), '---\ndescription: Beta\n---\n');
+      assert.equal(getAgents(tmp).length, 2);
+    } finally { rimraf(tmp); }
   });
 });
+
+// ── getMemoryFiles ────────────────────────────────────────────────────────────
 
 describe('getMemoryFiles', () => {
   test('returns empty array when projects dir does not exist', () => {
     const tmp = makeTmpDir();
-    try {
-      assert.deepEqual(getMemoryFiles(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    try { assert.deepEqual(getMemoryFiles(tmp), []); } finally { rimraf(tmp); }
   });
 
-  test('returns empty array when no memory subdirectories exist', () => {
+  test('returns empty when no memory subdirectories exist', () => {
     const tmp = makeTmpDir();
     try {
       fs.mkdirSync(path.join(tmp, 'projects', 'my-project'), { recursive: true });
       assert.deepEqual(getMemoryFiles(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
   });
 
   test('parses memory files with frontmatter', () => {
@@ -278,22 +315,13 @@ describe('getMemoryFiles', () => {
     try {
       const memDir = path.join(tmp, 'projects', '-Users-andre-myproject', 'memory');
       fs.mkdirSync(memDir, { recursive: true });
-      fs.writeFileSync(path.join(memDir, 'user_role.md'), [
-        '---',
-        'name: User Role',
-        'type: user',
-        '---',
-        '',
-        'Andre is a developer.',
-      ].join('\n'));
+      fs.writeFileSync(path.join(memDir, 'user_role.md'), '---\nname: User Role\ntype: user\n---\n\nAndre is a developer.');
       const files = getMemoryFiles(tmp);
       assert.equal(files.length, 1);
       assert.equal(files[0].name, 'User Role');
       assert.equal(files[0].type, 'user');
       assert.ok(files[0].body.includes('Andre is a developer.'));
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
   });
 
   test('skips MEMORY.md index file', () => {
@@ -303,9 +331,7 @@ describe('getMemoryFiles', () => {
       fs.mkdirSync(memDir, { recursive: true });
       fs.writeFileSync(path.join(memDir, 'MEMORY.md'), '# Index');
       assert.deepEqual(getMemoryFiles(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
   });
 
   test('skips unreadable memory files without crashing', () => {
@@ -318,8 +344,239 @@ describe('getMemoryFiles', () => {
       fs.chmodSync(f, 0o000);
       assert.doesNotThrow(() => getMemoryFiles(tmp));
       assert.deepEqual(getMemoryFiles(tmp), []);
-    } finally {
-      rimraf(tmp);
-    }
+    } finally { rimraf(tmp); }
+  });
+
+  test('defaults type to unknown when missing', () => {
+    const tmp = makeTmpDir();
+    try {
+      const memDir = path.join(tmp, 'projects', 'proj', 'memory');
+      fs.mkdirSync(memDir, { recursive: true });
+      fs.writeFileSync(path.join(memDir, 'notype.md'), '---\nname: No Type\n---\nBody.');
+      assert.equal(getMemoryFiles(tmp)[0].type, 'unknown');
+    } finally { rimraf(tmp); }
+  });
+
+  test('converts project dir dashes to path slashes', () => {
+    const tmp = makeTmpDir();
+    try {
+      const memDir = path.join(tmp, 'projects', '-Users-andre-Code', 'memory');
+      fs.mkdirSync(memDir, { recursive: true });
+      fs.writeFileSync(path.join(memDir, 'file.md'), '---\nname: f\ntype: user\n---\n');
+      const proj = getMemoryFiles(tmp)[0].proj;
+      assert.ok(proj.includes('/'), 'should contain forward slashes');
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── parseMcpEntry ─────────────────────────────────────────────────────────────
+
+describe('parseMcpEntry', () => {
+  test('detects node server type', () => {
+    const e = parseMcpEntry('srv', { command: 'node', args: ['/path/server.js'] }, 'settings.json');
+    assert.equal(e.serverType, 'node');
+  });
+
+  test('detects npx server type', () => {
+    const e = parseMcpEntry('srv', { command: 'npx', args: ['some-pkg'] }, 'settings.json');
+    assert.equal(e.serverType, 'npx');
+  });
+
+  test('detects python server type for uvx', () => {
+    const e = parseMcpEntry('srv', { command: 'uvx', args: ['tool'] }, 'settings.json');
+    assert.equal(e.serverType, 'python');
+  });
+
+  test('detects python server type for uv', () => {
+    const e = parseMcpEntry('srv', { command: 'uv', args: ['run', 'server.py'] }, 'settings.json');
+    assert.equal(e.serverType, 'python');
+  });
+
+  test('detects docker server type', () => {
+    const e = parseMcpEntry('srv', { command: 'docker', args: ['run', 'img'] }, 'settings.json');
+    assert.equal(e.serverType, 'docker');
+  });
+
+  test('unknown server type for unrecognised command', () => {
+    const e = parseMcpEntry('srv', { command: 'ruby', args: ['server.rb'] }, 'settings.json');
+    assert.equal(e.serverType, 'unknown');
+  });
+
+  test('marks .js entry point as missing when file does not exist', () => {
+    const e = parseMcpEntry('srv', { command: 'node', args: ['/nonexistent/server.js'] }, 'settings.json');
+    assert.equal(e.fileStatus, 'missing');
+  });
+
+  test('marks entry point as found when file exists', () => {
+    const tmp = makeTmpDir();
+    try {
+      const f = path.join(tmp, 'server.js');
+      fs.writeFileSync(f, '// server');
+      const e = parseMcpEntry('srv', { command: 'node', args: [f] }, 'settings.json');
+      assert.equal(e.fileStatus, 'found');
+    } finally { rimraf(tmp); }
+  });
+
+  test('fileStatus is unknown for non-file args', () => {
+    const e = parseMcpEntry('srv', { command: 'npx', args: ['some-package'] }, 'settings.json');
+    assert.equal(e.fileStatus, 'unknown');
+  });
+
+  test('redacts env vars in config', () => {
+    const e = parseMcpEntry('srv', { command: 'node', args: [], env: { SECRET: 'shh', TOKEN: 'abc' } }, 'settings.json');
+    assert.ok(typeof e.config.env === 'string');
+    assert.ok(e.config.env.includes('redacted'));
+    assert.ok(e.config.env.includes('2'));
+    assert.equal(e.envCount, 2);
+    assert.equal(e.hasEnv, true);
+  });
+
+  test('envCount is 0 when no env', () => {
+    const e = parseMcpEntry('srv', { command: 'node', args: [] }, 'settings.json');
+    assert.equal(e.envCount, 0);
+    assert.equal(e.hasEnv, false);
+  });
+
+  test('args defaults to empty array when not provided', () => {
+    const e = parseMcpEntry('srv', { command: 'node' }, 'settings.json');
+    assert.deepEqual(e.args, []);
+  });
+
+  test('preserves name and source', () => {
+    const e = parseMcpEntry('my-server', { command: 'node', args: [] }, 'project/.mcp.json');
+    assert.equal(e.name, 'my-server');
+    assert.equal(e.source, 'project/.mcp.json');
+  });
+});
+
+// ── getHooks ──────────────────────────────────────────────────────────────────
+
+describe('getHooks', () => {
+  test('returns empty array when settings has no hooks', () => {
+    assert.deepEqual(getHooks({}), []);
+    assert.deepEqual(getHooks(null), []);
+    assert.deepEqual(getHooks({ mcpServers: {} }), []);
+  });
+
+  test('extracts a single hook', () => {
+    const s = {
+      hooks: {
+        PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo hi' }] }],
+      },
+    };
+    const hooks = getHooks(s);
+    assert.equal(hooks.length, 1);
+    assert.equal(hooks[0].ev, 'PostToolUse');
+    assert.equal(hooks[0].matcher, 'Bash');
+    assert.equal(hooks[0].type, 'command');
+    assert.equal(hooks[0].cmd, 'echo hi');
+  });
+
+  test('extracts multiple events and hooks', () => {
+    const s = {
+      hooks: {
+        PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'pre' }] }],
+        PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'post' }] }],
+      },
+    };
+    assert.equal(getHooks(s).length, 2);
+  });
+
+  test('defaults matcher to * when not set', () => {
+    const s = {
+      hooks: {
+        PreToolUse: [{ hooks: [{ type: 'command', command: 'run' }] }],
+      },
+    };
+    assert.equal(getHooks(s)[0].matcher, '*');
+  });
+
+  test('picks up prompt-type hook cmd', () => {
+    const s = {
+      hooks: {
+        PostToolUse: [{ matcher: '*', hooks: [{ type: 'prompt', prompt: 'Do X' }] }],
+      },
+    };
+    assert.equal(getHooks(s)[0].cmd, 'Do X');
+  });
+
+  test('picks up async flag', () => {
+    const s = {
+      hooks: {
+        PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'x', async: true }] }],
+      },
+    };
+    assert.equal(getHooks(s)[0].async, true);
+  });
+
+  test('skips matchers with no hooks array', () => {
+    const s = { hooks: { PostToolUse: [{ matcher: 'Bash' }] } };
+    assert.deepEqual(getHooks(s), []);
+  });
+});
+
+// ── getPlugins ────────────────────────────────────────────────────────────────
+
+describe('getPlugins', () => {
+  test('returns empty array when no enabledPlugins', () => {
+    assert.deepEqual(getPlugins({}), []);
+    assert.deepEqual(getPlugins(null), []);
+  });
+
+  test('maps enabled plugins correctly', () => {
+    const s = { enabledPlugins: { 'my-plugin': true, 'off-plugin': false } };
+    const plugins = getPlugins(s);
+    assert.equal(plugins.length, 2);
+    const on = plugins.find(p => p.id === 'my-plugin');
+    const off = plugins.find(p => p.id === 'off-plugin');
+    assert.equal(on.on, true);
+    assert.equal(off.on, false);
+  });
+});
+
+// ── getEnv ────────────────────────────────────────────────────────────────────
+
+describe('getEnv', () => {
+  test('returns empty object when no env', () => {
+    assert.deepEqual(getEnv({}), {});
+    assert.deepEqual(getEnv(null), {});
+  });
+
+  test('returns env object from settings', () => {
+    const s = { env: { FOO: 'bar', COUNT: '42' } };
+    assert.deepEqual(getEnv(s), { FOO: 'bar', COUNT: '42' });
+  });
+});
+
+// ── esc / escJ ────────────────────────────────────────────────────────────────
+
+describe('esc', () => {
+  test('escapes &', () => assert.equal(esc('a & b'), 'a &amp; b'));
+  test('escapes <', () => assert.equal(esc('<div>'), '&lt;div&gt;'));
+  test('escapes "', () => assert.equal(esc('"hi"'), '&quot;hi&quot;'));
+  test('handles non-string input', () => assert.equal(esc(42), '42'));
+  test('no-ops clean string', () => assert.equal(esc('hello'), 'hello'));
+});
+
+describe('escJ', () => {
+  test('escapes < and > to unicode', () => {
+    const out = escJ('<script>');
+    assert.ok(out.includes('\\u003c'));
+    assert.ok(out.includes('\\u003e'));
+  });
+
+  test('escapes backtick', () => {
+    const out = escJ('`template`');
+    assert.ok(out.includes('\\u0060'));
+  });
+
+  test('escapes $', () => {
+    const out = escJ('${injection}');
+    assert.ok(out.includes('\\u0024'));
+  });
+
+  test('output is valid JSON', () => {
+    const out = escJ({ key: '<value>' });
+    assert.doesNotThrow(() => JSON.parse(out));
   });
 });
