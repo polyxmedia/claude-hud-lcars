@@ -1221,6 +1221,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="waveform hidden" id="waveform"></div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
   <div class="computer-bar-toggles">
+    <button class="tgl-btn on" id="mode-toggle" style="background:var(--green)" onclick="toggleMode(this)">CLAUDE</button>
     <button class="tgl-btn on" id="cr-toggle" style="background:var(--tan);display:none" onclick="toggleCR()">LOG</button>
     <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleVoice(this)">VOICE</button>
     <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
@@ -1986,6 +1987,110 @@ document.addEventListener('click', function(e) {
 // Typing stops speech
 document.getElementById('cb-in').addEventListener('input', stopSpeaking);
 
+// ═══ CLAUDE CODE ORCHESTRATION ═══
+function sendClaude(text) {
+  var input = document.getElementById('cb-in');
+  input.value = '';
+  beepSend();
+
+  addMsg('user', text);
+
+  var cr = document.getElementById('cr');
+  var crBody = document.getElementById('cr-body');
+  crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">COMMAND</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div><div id="claude-stream"><span style="color:var(--green);font-size:0.7rem;letter-spacing:0.1em">CLAUDE CODE EXECUTING...</span></div>';
+  cr.classList.add('visible');
+
+  var btn = document.getElementById('cb-send');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  var streamDiv = null;
+  var fullText = '';
+  var toolsUsed = [];
+
+  fetch('/api/claude', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ message: text }),
+  }).then(function(res) {
+    if (!res.ok) {
+      return res.json().then(function(e) { throw new Error(e.error || 'Claude Code failed'); });
+    }
+
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+
+    function pump() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          btn.disabled = false;
+          btn.textContent = 'SEND';
+          beepReceive();
+          showLogButton();
+          // Render final output
+          var output = '';
+          if (toolsUsed.length) {
+            output += '<div style="margin-bottom:12px"><span style="font-size:0.65rem;color:var(--tan);letter-spacing:0.1em;text-transform:uppercase">TOOLS USED</span>';
+            toolsUsed.forEach(function(t) {
+              output += '<div style="font-size:0.78rem;color:var(--dim);padding:2px 0">' + esc(t) + '</div>';
+            });
+            output += '</div>';
+          }
+          output += md(fullText);
+          crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">COMMAND</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div>' + output;
+          addMsg('ai', fullText);
+          speak(fullText);
+          return;
+        }
+
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split('\\n');
+        buffer = lines.pop() || '';
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (line.startsWith('data: ')) {
+            var data = line.slice(6).trim();
+            try {
+              var evt = JSON.parse(data);
+              if (evt.type === 'text') {
+                fullText += evt.text;
+                if (!streamDiv) {
+                  streamDiv = document.getElementById('claude-stream');
+                }
+                if (streamDiv) {
+                  streamDiv.innerHTML = '<span style="font-size:0.65rem;color:var(--green);letter-spacing:0.1em;text-transform:uppercase">CLAUDE CODE OUTPUT</span>' + md(fullText);
+                  cr.scrollTop = cr.scrollHeight;
+                }
+              } else if (evt.type === 'tool') {
+                toolsUsed.push(evt.name + '(' + JSON.stringify(evt.input).slice(0, 60) + ')');
+                if (streamDiv) {
+                  streamDiv.innerHTML = '<span style="font-size:0.65rem;color:var(--tan);letter-spacing:0.1em;text-transform:uppercase">EXECUTING: ' + esc(evt.name) + '</span>' + md(fullText);
+                }
+              } else if (evt.type === 'status') {
+                // Show status updates
+                if (streamDiv) {
+                  var statusHtml = '<div style="font-size:0.72rem;color:var(--dim);margin-bottom:4px">' + esc(evt.text) + '</div>';
+                  streamDiv.insertAdjacentHTML('afterbegin', statusHtml);
+                }
+              }
+            } catch(e) {}
+          }
+        }
+        return pump();
+      });
+    }
+
+    return pump();
+  }).catch(function(e) {
+    crBody.innerHTML += '<div style="color:var(--red);margin-top:10px">ERROR: ' + esc(e.message) + '</div>';
+    addMsg('err', 'CLAUDE CODE ERROR: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'SEND';
+  });
+}
+
 // ═══ LCARS CUSTOM SELECTS ═══
 function toggleLcarsSelect(id) {
   var wrap = document.getElementById(id);
@@ -2568,6 +2673,19 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') stopSpeaking();
 });
 
+// ═══ MODE TOGGLE (CLAUDE vs CHAT) ═══
+function toggleMode(btn) {
+  var wasOn = btn.classList.contains('on');
+  btn.classList.toggle('on', !wasOn);
+  btn.classList.toggle('off', wasOn);
+  lcarsBeep(wasOn ? 600 : 1200, 0.06);
+  toast(wasOn ? 'MODE: DIRECT CHAT' : 'MODE: CLAUDE CODE');
+}
+
+function isClaudeMode() {
+  return isToggleOn('mode-toggle');
+}
+
 // ═══ GLOBAL COMPUTER CHAT ═══
 var chatHistory = [];
 
@@ -2624,6 +2742,12 @@ function sendGlobal() {
 
   if (!window.HUD_LIVE) {
     toast('COMMS OFFLINE. Run: node src/server.js');
+    return;
+  }
+
+  // Route to Claude Code orchestration if in CLAUDE mode
+  if (isClaudeMode()) {
+    sendClaude(text);
     return;
   }
 

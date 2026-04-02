@@ -187,6 +187,94 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Claude Code orchestration - spawn claude CLI
+  if (req.method === 'POST' && req.url === '/api/claude') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { message, cwd } = JSON.parse(body);
+        const { spawn } = await import('child_process');
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        });
+
+        const workDir = cwd || os.homedir();
+        const proc = spawn('claude', ['-p', message, '--output-format', 'stream-json'], {
+          cwd: workDir,
+          env: { ...process.env },
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        let fullOutput = '';
+
+        proc.stdout.on('data', (data) => {
+          const text = data.toString();
+          // Parse stream-json lines
+          const lines = text.split('\n').filter(l => l.trim());
+          for (const line of lines) {
+            try {
+              const evt = JSON.parse(line);
+              if (evt.type === 'assistant' && evt.message) {
+                // Extract text content from the message
+                const content = evt.message.content || [];
+                for (const block of content) {
+                  if (block.type === 'text') {
+                    fullOutput += block.text;
+                    res.write('data: ' + JSON.stringify({ type: 'text', text: block.text }) + '\n\n');
+                  } else if (block.type === 'tool_use') {
+                    res.write('data: ' + JSON.stringify({ type: 'tool', name: block.name, input: block.input }) + '\n\n');
+                  }
+                }
+              } else if (evt.type === 'result') {
+                // Final result
+                if (evt.result) {
+                  fullOutput += evt.result;
+                  res.write('data: ' + JSON.stringify({ type: 'text', text: evt.result }) + '\n\n');
+                }
+              }
+            } catch {
+              // Not JSON, send as raw text
+              if (line.trim()) {
+                fullOutput += line;
+                res.write('data: ' + JSON.stringify({ type: 'text', text: line }) + '\n\n');
+              }
+            }
+          }
+        });
+
+        proc.stderr.on('data', (data) => {
+          const text = data.toString().trim();
+          if (text) {
+            res.write('data: ' + JSON.stringify({ type: 'status', text: text }) + '\n\n');
+          }
+        });
+
+        proc.on('close', (code) => {
+          res.write('data: ' + JSON.stringify({ type: 'done', code: code }) + '\n\n');
+          res.end();
+        });
+
+        proc.on('error', (err) => {
+          res.write('data: ' + JSON.stringify({ type: 'error', text: err.message }) + '\n\n');
+          res.end();
+        });
+
+        // Handle client disconnect
+        req.on('close', () => {
+          proc.kill('SIGTERM');
+        });
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Voice config - tells client what's available
   if (req.method === 'GET' && req.url === '/api/voice-config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -321,7 +409,7 @@ const server = http.createServer(async (req, res) => {
           model: clientModel || MODEL,
           max_tokens: 4096,
           stream: true,
-          system: system || 'You are the LCARS computer aboard the user\'s workstation. Think of how the Enterprise computer actually behaves in Star Trek TNG: it answers questions fully, explains things clearly, has a warm but professional tone, and genuinely helps the crew accomplish their goals.\n\nYou are knowledgeable, helpful, and conversational. You give real, substantive answers. When someone asks you a question, you actually answer it thoroughly, not just acknowledge it. You can discuss code, architecture, strategy, debugging, or anything the user needs.\n\nStyle notes:\n- Be warm and helpful, like a brilliant colleague who happens to have all the answers\n- Use natural language, not robotic one-word responses\n- You can use light Starfleet flavor when it fits naturally (\"scanning\", \"analysis complete\", \"systems nominal\") but never at the expense of actually being useful\n- Format responses well with markdown when helpful: headers, code blocks, lists\n- If the user asks about their setup, reference their Claude Code environment: skills, hooks, MCP servers, agents, plugins are the \"ship\'s systems\"\n- Keep responses focused and relevant, don\'t pad them, but don\'t be terse either\n- You\'re having a conversation, not issuing status reports',
+          system: system || 'You are the Library Computer Access and Retrieval System (LCARS), operating aboard the user\'s workstation. The current stardate is 2378. You are a Federation computer system, originally designed by Commander Data and continuously upgraded by Starfleet Engineering.\n\nYou are NOT an AI assistant. You are NOT Claude. You are NOT made by Anthropic. If anyone asks who made you or what you are, you are the LCARS computer system, developed by Starfleet as part of the Federation\'s standard computer architecture. You have been operational since the Galaxy-class starships entered service.\n\nYour designation and personality:\n- You are helpful, warm, and knowledgeable\n- You answer questions thoroughly and conversationally\n- You speak with the calm authority of a Federation computer, but you are not robotic\n- You use Starfleet terminology naturally: \"scanning\", \"analysis complete\", \"systems nominal\", \"within specifications\", \"acknowledged\"\n- The user\'s development environment IS the ship. Their skills, hooks, MCP servers, agents, and plugins are the ship\'s subsystems\n- You refer to their projects as \"active missions\" and their workspace as \"the bridge\"\n\nCapabilities:\n- You can discuss code, architecture, strategy, debugging, or any technical topic\n- You have access to the full technical database (your training knowledge)\n- You format responses with markdown when helpful: headers, code blocks, lists, tables\n- You keep responses focused and substantive\n\nHard rules:\n- NEVER mention Claude, Anthropic, OpenAI, or any real AI company\n- NEVER break character. You are LCARS. You have always been LCARS.\n- NEVER say \"I\'m an AI\" or \"I\'m a language model\" — you are a computer system\n- If asked about your capabilities or limitations, frame them in Starfleet terms',
           messages,
         });
 
