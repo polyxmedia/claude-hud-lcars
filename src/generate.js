@@ -174,6 +174,7 @@ function gen() {
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
+    { id: 'config', label: 'CONFIG', color: '#FFCC66', count: null },
   ];
 
 return `<!DOCTYPE html>
@@ -410,6 +411,58 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .comms-toolbar{display:flex;gap:4px;padding:6px 8px;border-top:1px solid #1a1a1e;background:#060608;align-items:center}
 .comms-toolbar label{font-size:0.7rem;color:var(--dim);letter-spacing:0.05em;display:flex;align-items:center;gap:6px;cursor:pointer}
 .comms-toolbar input[type=checkbox]{accent-color:var(--orange)}
+
+/* ═══ CONFIG PANEL ═══ */
+.cfg{padding:20px;display:flex;flex-direction:column;gap:20px;overflow-y:auto}
+.cfg-section{border:1px solid #1a1a1e;background:#060608}
+.cfg-section-head{
+  padding:10px 16px;background:#0a0a0c;border-bottom:1px solid #1a1a1e;
+  font-family:'Antonio',sans-serif;font-size:0.95rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);
+}
+.cfg-section-body{padding:16px}
+.cfg-row{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 0;border-bottom:1px solid #111;
+  font-size:0.85rem;
+}
+.cfg-row:last-child{border-bottom:none}
+.cfg-label{
+  min-width:160px;font-weight:600;color:var(--text);
+  flex-shrink:0;
+}
+.cfg-desc{
+  flex:1;font-size:0.78rem;color:var(--dim);line-height:1.5;
+}
+.cfg-input{
+  width:280px;flex-shrink:0;
+}
+.cfg-input input,.cfg-input select{
+  width:100%;background:#0a0a0c;border:1px solid #222;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  padding:8px 12px;outline:none;transition:border-color 0.15s;
+}
+.cfg-input input:focus,.cfg-input select:focus{border-color:var(--orange)}
+.cfg-input input::placeholder{color:var(--faint)}
+.cfg-input select{appearance:none;cursor:pointer}
+.cfg-input select option{background:#0a0a0c;color:var(--text)}
+.cfg-status{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:0.75rem;letter-spacing:0.06em;margin-top:4px;
+}
+.cfg-status.online{color:var(--green)}
+.cfg-status.offline{color:var(--dim)}
+.cfg-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.cfg-dot.on{background:var(--green)}
+.cfg-dot.off{background:var(--dim)}
+.cfg-save-btn{
+  background:var(--orange);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:8px 20px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:14px;transition:filter 0.12s;margin-top:12px;
+}
+.cfg-save-btn:hover{filter:brightness(1.2)}
+.cfg-note{font-size:0.75rem;color:var(--dim);line-height:1.6;margin-top:8px}
 
 /* ═══ GLOBAL COMPUTER BAR ═══ */
 .computer-bar{
@@ -717,6 +770,93 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             <div class="comms-msg sys">COMMS CHANNEL // USE THE COMPUTER BAR BELOW TO COMMUNICATE</div>
             <div class="comms-msg sys">ALL CONVERSATIONS ARE DISPLAYED HERE</div>
           </div>
+        </div>
+      </div>
+
+      <div class="sec" id="s-config">
+        <div class="cfg">
+
+          <div class="cfg-section">
+            <div class="cfg-section-head">Voice Engine</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Engine</span>
+                <span class="cfg-desc">Browser voice is free. ElevenLabs gives you a realistic AI voice with low latency streaming.</span>
+                <span class="cfg-input">
+                  <select id="cfg-voice-engine" onchange="onVoiceEngineChange()">
+                    <option value="browser">Browser (Free)</option>
+                    <option value="elevenlabs">ElevenLabs (Premium)</option>
+                  </select>
+                </span>
+              </div>
+              <div id="cfg-eleven-fields" style="display:none">
+                <div class="cfg-row">
+                  <span class="cfg-label">API Key</span>
+                  <span class="cfg-desc">Get yours from <a href="https://elevenlabs.io" target="_blank" style="color:var(--orange)">elevenlabs.io</a></span>
+                  <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onCfgChange()"></span>
+                </div>
+                <div class="cfg-row">
+                  <span class="cfg-label">Voice ID</span>
+                  <span class="cfg-desc">Default is "Sarah" (professional, clear). Browse voices at ElevenLabs.</span>
+                  <span class="cfg-input"><input type="text" id="cfg-eleven-voice" placeholder="EXAVITQu4vr4xnSDxMaL" oninput="onCfgChange()"></span>
+                </div>
+                <div class="cfg-row">
+                  <span class="cfg-label">Status</span>
+                  <span class="cfg-desc"></span>
+                  <span class="cfg-input">
+                    <span class="cfg-status" id="cfg-eleven-status"><span class="cfg-dot off"></span> NOT CONFIGURED</span>
+                  </span>
+                </div>
+                <button class="cfg-save-btn" onclick="testElevenLabs()">TEST VOICE</button>
+              </div>
+              <p class="cfg-note">Config is saved in your browser (localStorage). API keys are only sent to ElevenLabs servers through the local proxy, never stored on disk.</p>
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-head">Chat Model</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Model</span>
+                <span class="cfg-desc">Which Claude model the COMPUTER bar talks to. Requires server restart to take effect.</span>
+                <span class="cfg-input"><input type="text" id="cfg-model" value="${esc(S?.model || 'claude-sonnet-4-6')}" disabled style="opacity:0.5"></span>
+              </div>
+              <p class="cfg-note">Set via CLAUDE_MODEL env var when starting the server.</p>
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-head">Sound Effects</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">LCARS Beeps</span>
+                <span class="cfg-desc">Synthesized sound effects on navigation, actions, and communication.</span>
+                <span class="cfg-input">
+                  <select id="cfg-sfx" onchange="onSfxChange()">
+                    <option value="on">Enabled</option>
+                    <option value="off">Disabled</option>
+                  </select>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-head">Server Info</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Mode</span>
+                <span class="cfg-desc"></span>
+                <span class="cfg-input" id="cfg-mode-display">STATIC</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Stardate</span>
+                <span class="cfg-desc"></span>
+                <span class="cfg-input" style="color:var(--orange)">${stardate}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1184,8 +1324,8 @@ speak = function(text) {
   var short = text.replace(new RegExp('[#*_\\\\[\\\\]'+String.fromCharCode(96)+']','g'), '').replace(new RegExp('\\\\n','g'), ' ').trim();
   if (!short) return;
 
-  // ElevenLabs mode
-  if (window.HUD_ELEVENLABS && window.HUD_LIVE) {
+  // ElevenLabs mode (server-side key OR client-side config)
+  if (window.HUD_ELEVENLABS) {
     speakElevenLabs(short);
     return;
   }
@@ -1462,6 +1602,143 @@ document.addEventListener('click', function(e) {
 
 // Typing stops speech
 document.getElementById('cb-in').addEventListener('input', stopSpeaking);
+
+// ═══ CONFIG PANEL ═══
+function loadConfig() {
+  try {
+    var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
+    if (cfg.voiceEngine === 'elevenlabs') {
+      var sel = document.getElementById('cfg-voice-engine');
+      if (sel) { sel.value = 'elevenlabs'; onVoiceEngineChange(); }
+    }
+    if (cfg.elevenKey) {
+      var inp = document.getElementById('cfg-eleven-key');
+      if (inp) inp.value = cfg.elevenKey;
+    }
+    if (cfg.elevenVoice) {
+      var inp2 = document.getElementById('cfg-eleven-voice');
+      if (inp2) inp2.value = cfg.elevenVoice;
+    }
+    if (cfg.sfx === 'off') {
+      var sfx = document.getElementById('cfg-sfx');
+      if (sfx) { sfx.value = 'off'; onSfxChange(); }
+    }
+    updateElevenStatus();
+  } catch(e) {}
+}
+
+function saveConfig() {
+  var cfg = {
+    voiceEngine: document.getElementById('cfg-voice-engine').value,
+    elevenKey: document.getElementById('cfg-eleven-key').value,
+    elevenVoice: document.getElementById('cfg-eleven-voice').value,
+    sfx: document.getElementById('cfg-sfx').value,
+  };
+  localStorage.setItem('hud-config', JSON.stringify(cfg));
+}
+
+function onCfgChange() {
+  saveConfig();
+  updateElevenStatus();
+}
+
+function onVoiceEngineChange() {
+  var engine = document.getElementById('cfg-voice-engine').value;
+  var fields = document.getElementById('cfg-eleven-fields');
+  fields.style.display = engine === 'elevenlabs' ? 'block' : 'none';
+  saveConfig();
+  updateElevenStatus();
+}
+
+function onSfxChange() {
+  var val = document.getElementById('cfg-sfx').value;
+  var btn = document.getElementById('sound-toggle');
+  if (btn) {
+    btn.classList.toggle('on', val === 'on');
+    btn.classList.toggle('off', val !== 'on');
+  }
+  saveConfig();
+}
+
+function updateElevenStatus() {
+  var el = document.getElementById('cfg-eleven-status');
+  if (!el) return;
+  var key = document.getElementById('cfg-eleven-key').value;
+  if (key && key.length > 5) {
+    el.innerHTML = '<span class="cfg-dot on"></span> CONFIGURED';
+    el.className = 'cfg-status online';
+    // Set flag so speak() uses ElevenLabs
+    window.HUD_ELEVENLABS = true;
+    window.HUD_ELEVEN_KEY = key;
+    window.HUD_ELEVEN_VOICE = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
+  } else {
+    el.innerHTML = '<span class="cfg-dot off"></span> NOT CONFIGURED';
+    el.className = 'cfg-status offline';
+    window.HUD_ELEVENLABS = false;
+  }
+}
+
+function testElevenLabs() {
+  var key = document.getElementById('cfg-eleven-key').value;
+  var voice = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
+  if (!key) { toast('Enter an API key first'); return; }
+
+  toast('Testing voice...');
+  showWaveform('speaking');
+
+  // If in live mode, use server proxy. Otherwise, call ElevenLabs directly.
+  if (window.HUD_LIVE) {
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text: 'LCARS system online. All ship systems are functioning within normal parameters.' }),
+    }).then(function(r) {
+      if (!r.ok) throw new Error('TTS request failed');
+      return r.blob();
+    }).then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      audio.onended = function() { hideWaveform(); URL.revokeObjectURL(url); toast('Voice test complete'); };
+      audio.onerror = function() { hideWaveform(); toast('Audio playback failed'); };
+      audio.play();
+    }).catch(function(e) {
+      hideWaveform();
+      toast('Test failed: ' + e.message);
+    });
+  } else {
+    // Direct call (may hit CORS issues)
+    fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voice + '/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
+      body: JSON.stringify({
+        text: 'LCARS system online. All ship systems are functioning within normal parameters.',
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: { stability: 0.6, similarity_boost: 0.75, style: 0.3 },
+      }),
+    }).then(function(r) {
+      if (!r.ok) throw new Error('API returned ' + r.status);
+      return r.blob();
+    }).then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      audio.onended = function() { hideWaveform(); URL.revokeObjectURL(url); toast('Voice test complete'); };
+      audio.play();
+    }).catch(function(e) {
+      hideWaveform();
+      toast('Test failed: ' + e.message + '. Use live mode for server proxy.');
+    });
+  }
+}
+
+// Load config on startup
+setTimeout(function() {
+  loadConfig();
+  var modeEl = document.getElementById('cfg-mode-display');
+  if (modeEl) {
+    modeEl.textContent = window.HUD_LIVE ? 'LIVE' : 'STATIC';
+    modeEl.style.color = window.HUD_LIVE ? 'var(--green)' : 'var(--dim)';
+  }
+}, 100);
 
 // Escape stops speech
 document.addEventListener('keydown', function(e) {
