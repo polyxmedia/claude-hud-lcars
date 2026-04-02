@@ -53,10 +53,30 @@ function getSettings() {
 
 function getMcpServers(s) {
   if (!s?.mcpServers) return [];
-  return Object.entries(s.mcpServers).map(([name, c]) => ({
-    name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
-    config: { ...c, env: c.env ? '{redacted}' : undefined },
-  }));
+  return Object.entries(s.mcpServers).map(([name, c]) => {
+    // Determine server type from command/args
+    let serverType = 'unknown';
+    const mainArg = (c.args || []).slice(-1)[0] || '';
+    if (c.command === 'node') serverType = 'node';
+    else if (c.command === 'uvx' || c.command === 'uv') serverType = 'python';
+    else if (c.command === 'npx') serverType = 'npx';
+    else if (c.command === 'docker') serverType = 'docker';
+
+    // Check if entry point exists
+    let fileStatus = 'unknown';
+    if (mainArg.endsWith('.js') || mainArg.endsWith('.mjs') || mainArg.endsWith('.py')) {
+      fileStatus = fs.existsSync(mainArg) ? 'found' : 'missing';
+    }
+
+    const envCount = c.env ? Object.keys(c.env).length : 0;
+
+    return {
+      name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
+      serverType, fileStatus, envCount,
+      entryPoint: mainArg,
+      config: { ...c, env: c.env ? '{redacted — ' + envCount + ' vars}' : undefined },
+    };
+  });
 }
 
 function getHooks(s) {
@@ -365,40 +385,60 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .emp{padding:16px 20px;color:var(--faint);font-size:0.88rem}
 .emp::before{content:'-- '}
 
-/* ═══ MCP SUBSYSTEM CARDS ═══ */
-.mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px;padding:12px}
+/* ═══ MCP TACTICAL DISPLAY ═══ */
+.mcp-overview{
+  display:flex;gap:3px;padding:12px 12px 0;
+}
+.mcp-overview-stat{
+  flex:1;background:#060608;border:1px solid #1a1a1e;padding:12px;text-align:center;
+}
+.mcp-overview-n{font-family:'Antonio',sans-serif;font-size:1.8rem;font-weight:700;line-height:1}
+.mcp-overview-n.green{color:var(--green)}
+.mcp-overview-n.red{color:var(--red)}
+.mcp-overview-n.orange{color:var(--orange)}
+.mcp-overview-n.total{color:var(--blue)}
+.mcp-overview-l{font-size:0.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+
+.mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:4px;padding:12px}
 .mcp-card{
   background:#060608;border:1px solid #1a1a1e;position:relative;
-  padding:14px 16px;cursor:pointer;transition:background 0.12s,border-color 0.15s;
+  padding:16px;cursor:pointer;transition:background 0.12s,border-color 0.15s;
+  display:grid;grid-template-rows:auto auto auto auto;gap:8px;
 }
 .mcp-card:hover{background:#0c0c10;border-color:#2a2a30}
 .mcp-card.sel{border-color:var(--orange);background:rgba(255,153,0,0.04)}
-.mcp-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.mcp-card-top{display:flex;align-items:center;gap:10px}
 .mcp-card-status{
-  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+  width:10px;height:10px;border-radius:50%;flex-shrink:0;
   background:var(--tan);box-shadow:0 0 4px rgba(204,153,102,0.4);
 }
-.mcp-card-status.ready{background:var(--green);box-shadow:0 0 6px var(--green)}
-.mcp-card-status.error{background:var(--red);box-shadow:0 0 6px var(--red)}
+.mcp-card-status.ready{background:var(--green);box-shadow:0 0 8px var(--green)}
+.mcp-card-status.error{background:var(--red);box-shadow:0 0 8px var(--red)}
 .mcp-card-status.missing{background:var(--orange);box-shadow:0 0 6px rgba(255,153,0,0.4)}
 .mcp-card-status.checking{animation:status-blink 0.8s infinite}
 @keyframes status-blink{0%,100%{opacity:1}50%{opacity:0.3}}
 .mcp-card-name{
-  font-family:'Antonio',sans-serif;font-size:1rem;font-weight:600;
-  text-transform:uppercase;letter-spacing:0.06em;color:var(--text);
-  flex:1;
+  font-family:'Antonio',sans-serif;font-size:1.1rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.06em;color:var(--text);flex:1;
 }
-.mcp-card-cat{
+.mcp-card-type{
   font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;
-  padding:2px 8px;background:rgba(153,153,255,0.1);color:var(--blue);
-  flex-shrink:0;
+  padding:3px 8px;flex-shrink:0;
 }
-.mcp-card-body{display:flex;flex-direction:column;gap:4px}
-.mcp-card-row{display:flex;gap:8px;font-size:0.75rem;line-height:1.5}
-.mcp-card-label{color:var(--dim);min-width:56px;text-transform:uppercase;font-size:0.6rem;letter-spacing:0.08em;padding-top:2px}
+.mcp-card-type.node{background:rgba(85,204,85,0.12);color:var(--green)}
+.mcp-card-type.python{background:rgba(102,204,204,0.12);color:var(--cyan)}
+.mcp-card-type.npx{background:rgba(255,153,0,0.12);color:var(--orange)}
+.mcp-card-type.docker{background:rgba(153,153,255,0.12);color:var(--blue)}
+.mcp-card-type.unknown{background:rgba(204,153,102,0.12);color:var(--tan)}
+
+.mcp-card-body{display:flex;flex-direction:column;gap:3px}
+.mcp-card-row{display:flex;gap:8px;font-size:0.78rem;line-height:1.5}
+.mcp-card-label{color:var(--dim);min-width:50px;text-transform:uppercase;font-size:0.6rem;letter-spacing:0.08em;padding-top:2px}
 .mcp-card-val{color:var(--text);word-break:break-all}
+
+.mcp-card-footer{display:flex;align-items:center;justify-content:space-between}
 .mcp-card-bar{
-  height:3px;background:#1a1a1e;margin-top:10px;position:relative;overflow:hidden;
+  flex:1;height:3px;background:#1a1a1e;position:relative;overflow:hidden;
 }
 .mcp-card-bar .bar-fill{
   position:absolute;top:0;left:0;height:100%;width:100%;
@@ -414,8 +454,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 @keyframes mcp-scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .mcp-card-status-label{
-  font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;
-  margin-top:6px;
+  font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;margin-left:10px;flex-shrink:0;
 }
 .mcp-card-status-label.ready{color:var(--green)}
 .mcp-card-status-label.error{color:var(--red)}
@@ -1057,26 +1096,38 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <div class="cf-actions"><button class="cf-create" onclick="createMcp()">REGISTER</button><button class="cf-cancel" onclick="toggleCreate('mcp')">CANCEL</button></div>
         </div>
         ${mcp.length===0?'<div class="emp">No servers connected</div>':`
+        <div class="mcp-overview">
+          <div class="mcp-overview-stat"><div class="mcp-overview-n total">${mcp.length}</div><div class="mcp-overview-l">Total Servers</div></div>
+          <div class="mcp-overview-stat"><div class="mcp-overview-n green" id="mcp-ready-count">--</div><div class="mcp-overview-l">Online</div></div>
+          <div class="mcp-overview-stat"><div class="mcp-overview-n orange" id="mcp-warn-count">--</div><div class="mcp-overview-l">Degraded</div></div>
+          <div class="mcp-overview-stat"><div class="mcp-overview-n red" id="mcp-err-count">--</div><div class="mcp-overview-l">Offline</div></div>
+        </div>
         <div class="mcp-grid">
           ${mcp.map(s=>`
           <div class="mcp-card" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}" data-mcp="${esc(s.name)}">
             <div class="mcp-card-top">
               <div class="mcp-card-status checking" id="mcp-dot-${esc(s.name)}"></div>
               <div class="mcp-card-name">${esc(s.name)}</div>
-              ${s.hasEnv?'<span class="mcp-card-cat">ENV</span>':''}
+              <span class="mcp-card-type ${esc(s.serverType)}">${esc(s.serverType)}</span>
             </div>
             <div class="mcp-card-body">
               <div class="mcp-card-row">
                 <span class="mcp-card-label">CMD</span>
-                <span class="mcp-card-val">${esc(s.cmd)}</span>
+                <span class="mcp-card-val">${esc(s.cmd)} ${esc(s.args.join(' '))}</span>
               </div>
-              ${s.args.length?`<div class="mcp-card-row">
-                <span class="mcp-card-label">ARGS</span>
-                <span class="mcp-card-val" style="color:var(--dim)">${esc(s.args.join(' '))}</span>
+              ${s.envCount?`<div class="mcp-card-row">
+                <span class="mcp-card-label">ENV</span>
+                <span class="mcp-card-val" style="color:var(--tan)">${s.envCount} variable${s.envCount>1?'s':''} configured</span>
+              </div>`:''}
+              ${s.entryPoint?`<div class="mcp-card-row">
+                <span class="mcp-card-label">FILE</span>
+                <span class="mcp-card-val" style="color:var(--dim);font-size:0.7rem">${esc(s.entryPoint)}</span>
               </div>`:''}
             </div>
-            <div class="mcp-card-bar"><div class="bar-fill checking"></div></div>
-            <div class="mcp-card-status-label checking" id="mcp-label-${esc(s.name)}">CHECKING</div>
+            <div class="mcp-card-footer">
+              <div class="mcp-card-bar"><div class="bar-fill checking"></div></div>
+              <div class="mcp-card-status-label checking" id="mcp-label-${esc(s.name)}">CHECKING</div>
+            </div>
           </div>`).join('')}
         </div>`}
       </div>
@@ -2846,6 +2897,24 @@ function checkMcpStatus() {
     var bar = card.querySelector('.bar-fill');
     if (bar) bar.className = 'bar-fill ' + status;
   }
+
+  function updateOverviewCounts() {
+    var ready = 0, warn = 0, err = 0;
+    document.querySelectorAll('.mcp-card-status-label').forEach(function(el) {
+      if (el.classList.contains('ready')) ready++;
+      else if (el.classList.contains('missing') || el.classList.contains('unknown')) warn++;
+      else if (el.classList.contains('error')) err++;
+    });
+    var re = document.getElementById('mcp-ready-count');
+    var we = document.getElementById('mcp-warn-count');
+    var ee = document.getElementById('mcp-err-count');
+    if (re) re.textContent = String(ready).padStart(2, '0');
+    if (we) we.textContent = String(warn).padStart(2, '0');
+    if (ee) ee.textContent = String(err).padStart(2, '0');
+  }
+
+  // Update counters after status check
+  setTimeout(updateOverviewCounts, 3000);
 }
 
 // Escape stops speech
