@@ -9,6 +9,8 @@ const PORT = parseInt(process.env.PORT || '3200');
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
+const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // "Sarah" - clear, professional female
 
 // Import the dashboard generator
 const dashboardPath = path.join(import.meta.dirname, '..', 'dashboard.html');
@@ -38,7 +40,7 @@ const server = http.createServer(async (req, res) => {
       await generateDashboard();
       let html = fs.readFileSync(dashboardPath, 'utf-8');
       // Inject chat capability flag and voice mode
-      html = html.replace('</head>', '<script>window.HUD_LIVE=true;</script></head>');
+      html = html.replace('</head>', '<script>window.HUD_LIVE=true;window.HUD_ELEVENLABS=' + (!!ELEVEN_KEY) + ';</script></head>');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (e) {
@@ -94,6 +96,78 @@ const server = http.createServer(async (req, res) => {
         fs.writeFileSync(resolved, content, 'utf-8');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Voice config - tells client what's available
+  if (req.method === 'GET' && req.url === '/api/voice-config') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      elevenlabs: !!ELEVEN_KEY,
+      voiceId: ELEVEN_VOICE,
+    }));
+    return;
+  }
+
+  // ElevenLabs TTS proxy
+  if (req.method === 'POST' && req.url === '/api/tts') {
+    if (!ELEVEN_KEY) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'ELEVENLABS_API_KEY not set' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { text, voiceId } = JSON.parse(body);
+        const vid = voiceId || ELEVEN_VOICE;
+
+        const ttsRes = await fetch(
+          `https://api.elevenlabs.io/v1/text-to-speech/${vid}/stream`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'xi-api-key': ELEVEN_KEY,
+            },
+            body: JSON.stringify({
+              text: text.slice(0, 1000),
+              model_id: 'eleven_turbo_v2_5',
+              voice_settings: {
+                stability: 0.6,
+                similarity_boost: 0.75,
+                style: 0.3,
+              },
+            }),
+          }
+        );
+
+        if (!ttsRes.ok) {
+          const err = await ttsRes.text();
+          res.writeHead(ttsRes.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err }));
+          return;
+        }
+
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Transfer-Encoding': 'chunked',
+        });
+
+        const reader = ttsRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
@@ -192,6 +266,7 @@ server.listen(PORT, () => {
   console.log('  ║                                          ║');
   console.log('  ║  Dashboard:  http://localhost:' + PORT + '        ║');
   console.log('  ║  Chat API:   ' + (API_KEY ? 'ONLINE' : 'OFFLINE (no API key)') + '                ║');
+  console.log('  ║  Voice TTS:  ' + (ELEVEN_KEY ? 'ELEVENLABS' : 'BROWSER (free)') + '              ║');
   console.log('  ║  Model:      ' + MODEL.padEnd(28) + '║');
   console.log('  ║                                          ║');
   console.log('  ╚══════════════════════════════════════════╝');

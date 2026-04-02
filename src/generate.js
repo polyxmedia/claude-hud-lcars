@@ -1164,13 +1164,25 @@ function stopMic() {
   hideWaveform();
 }
 
-// Override speak to show waveform, interruptible
+// Override speak: ElevenLabs if available, else Web Speech API
+var currentAudio = null;
+
 speak = function(text) {
   if (!isToggleOn('voice-toggle')) return;
+
+  // Clean text for speech
+  var short = text.replace(new RegExp('[#*_\\\\[\\\\]'+String.fromCharCode(96)+']','g'), '').replace(new RegExp('\\\\n','g'), ' ').trim();
+  if (!short) return;
+
+  // ElevenLabs mode
+  if (window.HUD_ELEVENLABS && window.HUD_LIVE) {
+    speakElevenLabs(short);
+    return;
+  }
+
+  // Fallback: Web Speech API
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  // Only speak the first sentence or 200 chars, whichever is shorter
-  var short = text.replace(/[#*_\[\]]/g, '').trim();
   var firstSentence = short.match(/^[^.!?]+[.!?]/);
   var toSpeak = firstSentence ? firstSentence[0] : short.slice(0, 200);
   var u = new SpeechSynthesisUtterance(toSpeak);
@@ -1189,6 +1201,36 @@ speak = function(text) {
   u.onerror = function() { hideWaveform(); };
   speechSynthesis.speak(u);
 };
+
+function speakElevenLabs(text) {
+  stopSpeaking();
+  showWaveform('speaking');
+
+  fetch('/api/tts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ text: text.slice(0, 1000) }),
+  }).then(function(r) {
+    if (!r.ok) throw new Error('TTS failed');
+    return r.blob();
+  }).then(function(blob) {
+    var url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = function() {
+      hideWaveform();
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+    currentAudio.onerror = function() {
+      hideWaveform();
+      currentAudio = null;
+    };
+    currentAudio.play();
+  }).catch(function(e) {
+    hideWaveform();
+    console.error('ElevenLabs TTS error:', e);
+  });
+}
 
 // ═══ IN-HUD EDITOR ═══
 var currentEditPath = '';
@@ -1391,10 +1433,14 @@ speak = function(text) {
 
 // Interrupt speech on any user action
 function stopSpeaking() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
   if (window.speechSynthesis && speechSynthesis.speaking) {
     speechSynthesis.cancel();
-    hideWaveform();
   }
+  hideWaveform();
 }
 
 // Click waveform to stop
