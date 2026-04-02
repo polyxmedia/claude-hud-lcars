@@ -1035,10 +1035,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   </div>
   <div class="sb-foot">
     <div>STARDATE ${stardate} // ${ts}</div>
-    <div style="margin-top:6px;font-size:0.55rem;color:var(--faint);letter-spacing:0.06em">
-      <a href="https://polyxmedia.com" target="_blank" style="color:var(--dim);text-decoration:none">polyxmedia.com</a>
+    <div style="margin-top:8px;font-size:0.72rem;color:rgba(0,0,0,0.4);letter-spacing:0.06em;font-weight:600">
+      <a href="https://polyxmedia.com" target="_blank" style="color:rgba(0,0,0,0.55);text-decoration:none">polyxmedia.com</a>
       &nbsp;//&nbsp;
-      <a href="https://x.com/voidmode" target="_blank" style="color:var(--dim);text-decoration:none">@voidmode</a>
+      <a href="https://x.com/voidmode" target="_blank" style="color:rgba(0,0,0,0.55);text-decoration:none">@voidmode</a>
     </div>
   </div>
 </nav>
@@ -3438,6 +3438,188 @@ function sendGlobal() {
       if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
     }
   };
+})();
+
+// ═══ 3D ENTERPRISE (Three.js) ═══
+(function() {
+  var container = document.getElementById('enterprise-3d');
+  if (!container) return;
+
+  var script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js';
+  script.type = 'module';
+
+  // Use importmap for Three.js module
+  var importMap = document.createElement('script');
+  importMap.type = 'importmap';
+  importMap.textContent = JSON.stringify({
+    imports: { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" }
+  });
+  document.head.appendChild(importMap);
+
+  var modScript = document.createElement('script');
+  modScript.type = 'module';
+  modScript.textContent = [
+    'import * as THREE from "three";',
+    '',
+    'var container = document.getElementById("enterprise-3d");',
+    'if (!container) throw new Error("no container");',
+    '',
+    'var scene = new THREE.Scene();',
+    'var W = container.clientWidth, H = container.clientHeight;',
+    'var camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);',
+    'camera.position.set(0, 3, 8);',
+    'camera.lookAt(0, 0, 0);',
+    '',
+    'var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });',
+    'renderer.setSize(W, H);',
+    'renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));',
+    'renderer.setClearColor(0x020204);',
+    'container.appendChild(renderer.domElement);',
+    '',
+    'var mat = new THREE.MeshBasicMaterial({ color: 0xFF9900, wireframe: true, transparent: true, opacity: 0.6 });',
+    'var matGlow = new THREE.MeshBasicMaterial({ color: 0x9999FF, wireframe: true, transparent: true, opacity: 0.4 });',
+    'var matNacelle = new THREE.MeshBasicMaterial({ color: 0x66CCCC, wireframe: true, transparent: true, opacity: 0.5 });',
+    '',
+    'var ship = new THREE.Group();',
+    '',
+    '// Saucer section',
+    'var saucer = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.25, 32), mat);',
+    'saucer.rotation.x = 0;',
+    'saucer.position.set(0, 0, -1);',
+    'ship.add(saucer);',
+    '',
+    '// Saucer bridge dome',
+    'var bridge = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 8, 0, Math.PI*2, 0, Math.PI/2), matGlow);',
+    'bridge.position.set(0, 0.15, -1);',
+    'ship.add(bridge);',
+    '',
+    '// Neck connecting saucer to engineering',
+    'var neck = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 1.2), mat);',
+    'neck.position.set(0, -0.2, 0.2);',
+    'ship.add(neck);',
+    '',
+    '// Engineering hull (secondary hull)',
+    'var engShape = new THREE.CapsuleGeometry(0.45, 2.0, 8, 16);',
+    'var engineering = new THREE.Mesh(engShape, mat);',
+    'engineering.rotation.x = Math.PI / 2;',
+    'engineering.position.set(0, -0.5, 1.5);',
+    'ship.add(engineering);',
+    '',
+    '// Deflector dish',
+    'var deflector = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), matGlow);',
+    'deflector.position.set(0, -0.5, 0.3);',
+    'ship.add(deflector);',
+    '',
+    '// Left pylon',
+    'var pylonL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.3), mat);',
+    'pylonL.position.set(-1.2, 0.1, 1.8);',
+    'pylonL.rotation.z = -0.4;',
+    'ship.add(pylonL);',
+    '',
+    '// Right pylon',
+    'var pylonR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.3), mat);',
+    'pylonR.position.set(1.2, 0.1, 1.8);',
+    'pylonR.rotation.z = 0.4;',
+    'ship.add(pylonR);',
+    '',
+    '// Left nacelle',
+    'var nacL = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 2.4, 8, 16), matNacelle);',
+    'nacL.rotation.x = Math.PI / 2;',
+    'nacL.position.set(-1.7, 0.6, 1.5);',
+    'ship.add(nacL);',
+    '',
+    '// Right nacelle',
+    'var nacR = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 2.4, 8, 16), matNacelle);',
+    'nacR.rotation.x = Math.PI / 2;',
+    'nacR.position.set(1.7, 0.6, 1.5);',
+    'ship.add(nacR);',
+    '',
+    '// Nacelle glow caps',
+    'var capMat = new THREE.MeshBasicMaterial({ color: 0x66CCCC, transparent: true, opacity: 0.8 });',
+    'var capL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), capMat);',
+    'capL.position.set(-1.7, 0.6, 0.1);',
+    'ship.add(capL);',
+    'var capR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), capMat);',
+    'capR.position.set(1.7, 0.6, 0.1);',
+    'ship.add(capR);',
+    '',
+    'scene.add(ship);',
+    '',
+    '// Starfield',
+    'var starsGeo = new THREE.BufferGeometry();',
+    'var starsPos = [];',
+    'for (var i = 0; i < 500; i++) {',
+    '  starsPos.push((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60);',
+    '}',
+    'starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starsPos, 3));',
+    'var starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.08, transparent: true, opacity: 0.6 });',
+    'scene.add(new THREE.Points(starsGeo, starsMat));',
+    '',
+    '// Grid plane',
+    'var grid = new THREE.GridHelper(20, 20, 0x1a1a1e, 0x0a0a0e);',
+    'grid.position.y = -2;',
+    'scene.add(grid);',
+    '',
+    '// Mouse orbit',
+    'var isDragging = false, prevX = 0, prevY = 0, rotY = 0, rotX = 0.3;',
+    'container.addEventListener("mousedown", function(e) { isDragging = true; prevX = e.clientX; prevY = e.clientY; });',
+    'window.addEventListener("mouseup", function() { isDragging = false; });',
+    'window.addEventListener("mousemove", function(e) {',
+    '  if (!isDragging) return;',
+    '  rotY += (e.clientX - prevX) * 0.005;',
+    '  rotX += (e.clientY - prevY) * 0.005;',
+    '  rotX = Math.max(-1, Math.min(1, rotX));',
+    '  prevX = e.clientX; prevY = e.clientY;',
+    '});',
+    '',
+    '// Zoom',
+    'var zoom = 8;',
+    'container.addEventListener("wheel", function(e) {',
+    '  e.preventDefault();',
+    '  zoom = Math.max(4, Math.min(20, zoom + e.deltaY * 0.01));',
+    '}, { passive: false });',
+    '',
+    '// Label overlay',
+    'var label = document.createElement("div");',
+    'label.style.cssText = "position:absolute;top:12px;left:16px;font-family:Antonio,sans-serif;font-size:0.85rem;color:#FF9900;letter-spacing:0.12em;text-transform:uppercase;pointer-events:none";',
+    'label.textContent = "USS ENTERPRISE NCC-1701-D // TACTICAL VIEW";',
+    'container.style.position = "relative";',
+    'container.appendChild(label);',
+    '',
+    'var label2 = document.createElement("div");',
+    'label2.style.cssText = "position:absolute;bottom:12px;right:16px;font-size:0.65rem;color:#555;letter-spacing:0.08em;pointer-events:none";',
+    'label2.textContent = "DRAG TO ROTATE // SCROLL TO ZOOM";',
+    'container.appendChild(label2);',
+    '',
+    '// Animate',
+    'function animate() {',
+    '  requestAnimationFrame(animate);',
+    '  if (!isDragging) rotY += 0.003;',
+    '  camera.position.x = Math.sin(rotY) * zoom;',
+    '  camera.position.z = Math.cos(rotY) * zoom;',
+    '  camera.position.y = Math.sin(rotX) * zoom * 0.5 + 2;',
+    '  camera.lookAt(0, 0, 0.5);',
+    '',
+    '  // Nacelle glow pulse',
+    '  var pulse = 0.5 + Math.sin(Date.now() * 0.003) * 0.3;',
+    '  capMat.opacity = pulse;',
+    '',
+    '  renderer.render(scene, camera);',
+    '}',
+    '',
+    'animate();',
+    '',
+    '// Resize',
+    'window.addEventListener("resize", function() {',
+    '  var W = container.clientWidth, H = container.clientHeight;',
+    '  camera.aspect = W / H;',
+    '  camera.updateProjectionMatrix();',
+    '  renderer.setSize(W, H);',
+    '});',
+  ].join('\\n');
+
+  document.body.appendChild(modScript);
 })();
 </script>
 </body></html>`;
