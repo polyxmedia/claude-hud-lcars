@@ -10,7 +10,8 @@
     "build": "node src/generate.js",
     "start": "node src/server.js",
     "open": "node src/generate.js && open http://localhost:3200",
-    "serve": "node src/server.js"
+    "serve": "node src/server.js",
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "claude-code",
