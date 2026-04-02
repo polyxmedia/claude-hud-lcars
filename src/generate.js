@@ -176,6 +176,114 @@ function getPlugins(s) {
   return Object.entries(s.enabledPlugins).map(([id, en]) => ({ id, on: !!en }));
 }
 
+function getMarketplaceItems(installedMcpNames) {
+  const marketplaceDir = path.join(CLAUDE_DIR, 'plugins', 'marketplaces');
+  if (!fs.existsSync(marketplaceDir)) return [];
+
+  // Installed plugins: ~/.claude/plugins/* (excluding marketplaces/ subdir)
+  const installedPlugins = new Set();
+  const pluginsRoot = path.join(CLAUDE_DIR, 'plugins');
+  if (fs.existsSync(pluginsRoot)) {
+    for (const e of fs.readdirSync(pluginsRoot, { withFileTypes: true })) {
+      if (e.isDirectory() && e.name !== 'marketplaces') installedPlugins.add(e.name);
+    }
+  }
+
+  const items = [];
+
+  for (const mktEntry of fs.readdirSync(marketplaceDir, { withFileTypes: true })) {
+    if (!mktEntry.isDirectory()) continue;
+    const mktName = mktEntry.name;
+    const mktPath = path.join(marketplaceDir, mktName);
+
+    // Scan plugins/
+    const pluginsDir = path.join(mktPath, 'plugins');
+    if (fs.existsSync(pluginsDir)) {
+      for (const pe of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
+        if (!pe.isDirectory() || pe.name === 'README.md') continue;
+        const pluginPath = path.join(pluginsDir, pe.name);
+        const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json');
+        let description = '', author = '';
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const m = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            description = m.description || '';
+            author = (m.author && m.author.name) ? m.author.name : '';
+          } catch(e) {}
+        }
+        if (!description) {
+          const readme = path.join(pluginPath, 'README.md');
+          if (fs.existsSync(readme)) {
+            try {
+              const txt = fs.readFileSync(readme, 'utf-8');
+              const lines = txt.split('\n').filter(l => l.trim() && !l.startsWith('#') && !l.startsWith('>') && !l.startsWith('!'));
+              description = (lines[0] || '').slice(0, 180);
+            } catch(e) {}
+          }
+        }
+        const caps = [];
+        if (fs.existsSync(path.join(pluginPath, 'skills'))) caps.push('skills');
+        if (fs.existsSync(path.join(pluginPath, 'agents'))) caps.push('agents');
+        if (fs.existsSync(path.join(pluginPath, 'hooks'))) caps.push('hooks');
+        if (fs.existsSync(path.join(pluginPath, '.mcp.json'))) caps.push('mcp');
+        if (fs.existsSync(path.join(pluginPath, 'commands'))) caps.push('commands');
+
+        items.push({
+          id: mktName + ':' + pe.name,
+          name: pe.name,
+          description,
+          author,
+          type: 'plugin',
+          marketplace: mktName,
+          sourcePath: pluginPath,
+          mcpConfig: null,
+          isInstalled: installedPlugins.has(pe.name),
+          capabilities: caps,
+        });
+      }
+    }
+
+    // Scan external_plugins/
+    const extDir = path.join(mktPath, 'external_plugins');
+    if (fs.existsSync(extDir)) {
+      for (const ee of fs.readdirSync(extDir, { withFileTypes: true })) {
+        if (!ee.isDirectory()) continue;
+        const extPath = path.join(extDir, ee.name);
+        const manifestPath = path.join(extPath, '.claude-plugin', 'plugin.json');
+        const mcpPath = path.join(extPath, '.mcp.json');
+        let description = '', author = '', mcpConfig = null;
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const m = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            description = m.description || '';
+            author = (m.author && m.author.name) ? m.author.name : '';
+          } catch(e) {}
+        }
+        if (fs.existsSync(mcpPath)) {
+          try { mcpConfig = JSON.parse(fs.readFileSync(mcpPath, 'utf-8')); } catch(e) {}
+        }
+        const mcpKeys = mcpConfig ? Object.keys(mcpConfig) : [];
+        const isInstalled = mcpKeys.length > 0 && mcpKeys.every(k => installedMcpNames.has(k));
+
+        items.push({
+          id: mktName + ':ext:' + ee.name,
+          name: ee.name,
+          description,
+          author,
+          type: 'mcp',
+          marketplace: mktName,
+          sourcePath: extPath,
+          mcpConfig,
+          isInstalled,
+          capabilities: ['mcp'],
+        });
+      }
+    }
+  }
+
+  return items.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function getMemoryFiles() {
   const out = [];
   const dir = path.join(CLAUDE_DIR, 'projects');
@@ -296,6 +404,7 @@ function gen() {
   const installedSkillNames = new Set(skills.map(s => s.name));
   const installedAgentNames = new Set(agents.map(a => a.name));
   const installedMcpNames = new Set(mcp.map(m => m.name));
+  const marketItems = getMarketplaceItems(installedMcpNames);
 
   const SKILL_SUGG = [
     { name: 'code-review', desc: 'Principal-level code review: security, logic, performance, architecture', content: '---\nname: code-review\ndescription: "Principal-level code review"\ncontext: fork\nversion: 1.0.0\n---\n\nReview the changed code with principal-engineer judgment:\n1. Security vulnerabilities (OWASP top 10, injection, auth)\n2. Logic errors and edge cases\n3. Performance implications\n4. Code quality and maintainability\n5. Missing tests\n\nFormat each finding as [CRITICAL/HIGH/MEDIUM/LOW] — issue — suggested fix.' },
@@ -445,6 +554,18 @@ function gen() {
       b: h.desc+'\n\n```bash\n'+h.cmd+'\n```',
       actions: [{ label: '+ INSTALL', cmd: 'install:hook:'+h.name, icon: 'INSTALL' }] };
   });
+  marketItems.forEach(item => {
+    const mcpBody = item.mcpConfig ? '\\n\\n```json\\n' + JSON.stringify(item.mcpConfig, null, 2) + '\\n```' : '';
+    D['mk:'+item.id] = {
+      t: item.name,
+      tp: item.type === 'mcp' ? 'MCP SERVER PLUGIN' : 'PLUGIN MODULE',
+      m: item.marketplace + (item.author ? ' // ' + item.author : '') + (item.isInstalled ? ' // INSTALLED' : ''),
+      b: (item.description || 'No description available.') + mcpBody,
+      actions: item.isInstalled
+        ? [{ label: 'INSTALLED', cmd: '', icon: 'OK' }]
+        : [{ label: item.type === 'mcp' ? '+ ADD MCP' : '+ INSTALL', cmd: 'mkinstall:' + item.id, icon: 'INSTALL' }]
+    };
+  });
   mem.forEach(m => {
     const memPath = path.join(CLAUDE_DIR, 'projects', m.proj.replace(/\//g,'-'), 'memory', m.file);
     D['e:'+m.file] = { t: m.name, tp: 'MEMORY FILE // '+m.type.toUpperCase(), m: m.proj, b: m.body,
@@ -499,6 +620,7 @@ function gen() {
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
     { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: sessionList.length },
     { id: 'claudemd', label: 'CLAUDE.MD', color: '#EE8844', count: claudeMds.length },
+    { id: 'market', label: 'MARKET', color: '#FF6644', count: marketItems.length },
     { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
     { id: 'q', label: 'Q', color: '#CC4444', count: null },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
@@ -831,6 +953,31 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .suggest-install{background:#FF9900;color:#000;border:none;padding:3px 10px;font-family:monospace;font-size:0.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px;transition:background .1s}
 .suggest-install:hover{background:#FFAA22}
 .suggest-install:disabled{background:#2a2a2a;color:#555;cursor:default}
+
+/* ═══ MARKETPLACE ═══ */
+.mkt-filters{display:flex;gap:6px;padding:10px 16px 0;flex-wrap:wrap}
+.mkt-filter-btn{font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:4px 12px;border:1.5px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer;border-radius:3px;transition:all 0.15s}
+.mkt-filter-btn.act{border-color:var(--orange);color:var(--orange);background:rgba(255,153,0,0.08)}
+.mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:12px 16px;overflow-y:auto}
+.mkt-card{background:#0a0a0a;border:1px solid #222;border-radius:4px;padding:14px;cursor:pointer;transition:border-color 0.15s,background 0.15s;display:flex;flex-direction:column;gap:8px}
+.mkt-card:hover{border-color:var(--orange);background:#0f0f0f}
+.mkt-card.installed{border-color:#1a3a1a}
+.mkt-card-name{font-family:'Antonio',sans-serif;font-size:1rem;font-weight:600;color:var(--peach);letter-spacing:0.04em;text-transform:uppercase}
+.mkt-card-desc{font-size:0.72rem;color:var(--dim);line-height:1.5;flex:1}
+.mkt-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+.mkt-card-author{font-size:0.65rem;color:var(--dim);letter-spacing:0.05em}
+.mkt-src{font-family:'Antonio',sans-serif;font-size:0.65rem;padding:2px 7px;border-radius:2px;background:#1a1a1a;color:var(--dim);letter-spacing:0.06em;text-transform:uppercase}
+.mkt-cap{font-family:'Antonio',sans-serif;font-size:0.6rem;padding:2px 6px;border-radius:2px;letter-spacing:0.08em;text-transform:uppercase}
+.mkt-cap.skills{background:rgba(153,153,255,0.15);color:var(--blue)}
+.mkt-cap.agents{background:rgba(255,204,153,0.15);color:var(--peach)}
+.mkt-cap.hooks{background:rgba(204,153,102,0.15);color:var(--tan)}
+.mkt-cap.mcp{background:rgba(255,153,0,0.15);color:var(--orange)}
+.mkt-cap.commands{background:rgba(102,204,204,0.15);color:var(--cyan)}
+.mkt-card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+.mkt-install-btn{font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:5px 14px;border:1.5px solid var(--orange);background:transparent;color:var(--orange);cursor:pointer;border-radius:3px;transition:all 0.15s}
+.mkt-install-btn:hover{background:var(--orange);color:#000}
+.mkt-install-btn:disabled{border-color:var(--faint);color:var(--faint);cursor:default}
+.mkt-installed-badge{font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.1em;color:var(--green);text-transform:uppercase}
 
 /* ═══ CONFIRM MODAL ═══ */
 .hud-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;animation:fadein .15s}
@@ -1672,6 +1819,31 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-id">${esc(p.id)}</span>
           <span class="tg ${p.on?'tg-g':'tg-r'}">${p.on?'ACTIVE':'INACTIVE'}</span>
         </div>`).join('')}
+      </div>
+
+      <div class="sec" id="s-market">
+        <div class="sec-h"><span>Marketplace // ${marketItems.length} Available</span></div>
+        <div class="mkt-filters" id="mkt-filters">
+          <button class="mkt-filter-btn act" onclick="filterMkt('all',this)">ALL</button>
+          <button class="mkt-filter-btn" onclick="filterMkt('plugin',this)">PLUGINS</button>
+          <button class="mkt-filter-btn" onclick="filterMkt('mcp',this)">MCP SERVERS</button>
+          <button class="mkt-filter-btn" onclick="filterMkt('installed',this)">INSTALLED</button>
+        </div>
+        ${marketItems.length === 0 ? '<div class="emp">No marketplace data found</div>' : `
+        <div class="mkt-grid" id="mkt-grid">
+          ${marketItems.map(item => {
+            const caps = item.capabilities.map(c => `<span class="mkt-cap ${esc(c)}">${esc(c)}</span>`).join('');
+            const installBtn = item.isInstalled
+              ? '<span class="mkt-installed-badge">&#10003; INSTALLED</span>'
+              : `<button class="mkt-install-btn" onclick="event.stopPropagation();installMarketItem(this,${escA(item.id)},${escA(item.type)},${escA(item.sourcePath)},${item.mcpConfig ? escA(JSON.stringify(item.mcpConfig)) : escA('')})">+ INSTALL</button>`;
+            return `<div class="mkt-card${item.isInstalled ? ' installed' : ''}" onclick="open_('mk:${esc(item.id)}');beepOpen()" data-k="mk:${esc(item.id)}" data-mkt-type="${esc(item.type)}">
+              <div class="mkt-card-name">${esc(item.name)}</div>
+              <div class="mkt-card-desc">${esc(item.description || 'No description available.')}</div>
+              <div class="mkt-card-meta">${caps}<span class="mkt-src">${esc(item.marketplace)}</span>${item.author ? `<span class="mkt-card-author">by ${esc(item.author)}</span>` : ''}</div>
+              <div class="mkt-card-footer">${installBtn}</div>
+            </div>`;
+          }).join('')}
+        </div>`}
       </div>
 
       <div class="sec" id="s-agents">
@@ -3640,6 +3812,61 @@ function installSuggestHook(btn, event, matcher, cmd) {
       toast('HOOK INSTALLED: ' + event); beepAction();
     } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
   }).catch(function(e){ btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+e.message); });
+}
+
+function filterMkt(type, btn) {
+  document.querySelectorAll('.mkt-filter-btn').forEach(function(b){b.classList.remove('act')});
+  btn.classList.add('act');
+  var cards = document.querySelectorAll('#mkt-grid .mkt-card');
+  cards.forEach(function(card) {
+    var cardType = card.getAttribute('data-mkt-type');
+    var isInstalled = card.classList.contains('installed');
+    if (type === 'all') card.style.display = '';
+    else if (type === 'installed') card.style.display = isInstalled ? '' : 'none';
+    else card.style.display = cardType === type ? '' : 'none';
+  });
+}
+
+function installMarketItem(btn, id, type, sourcePath, mcpConfigJson) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  var payload = { id: id, type: type, sourcePath: sourcePath };
+  if (mcpConfigJson) { try { payload.mcpConfig = JSON.parse(mcpConfigJson); } catch(e) {} }
+  fetch('/api/marketplace/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        btn.style.display = 'none';
+        var footer = btn.parentNode;
+        var badge = document.createElement('span');
+        badge.className = 'mkt-installed-badge'; badge.textContent = '✓ INSTALLED';
+        footer.appendChild(badge);
+        var card = btn.closest('.mkt-card');
+        if (card) card.classList.add('installed');
+        var key = 'mk:' + id;
+        if (window._D && window._D[key]) {
+          window._D[key].actions = [{ label: 'INSTALLED', cmd: '', icon: 'OK' }];
+          if (window._D[key].m.indexOf(' // INSTALLED') === -1) window._D[key].m += ' // INSTALLED';
+        }
+        var pluginName = id.split(':').pop();
+        if (type === 'plugin') { toast('PLUGIN INSTALLED: ' + pluginName); }
+        else {
+          // Also add MCP entries to D and MCP section
+          if (d.mcpAdded && window._D) {
+            d.mcpAdded.forEach(function(name) {
+              var mcpKey = 'm:' + name;
+              window._D[mcpKey] = { t: name, tp: 'MCP SERVER CONFIG', m: name, b: '', actions: [{ label: 'DELETE', cmd: 'mcp:' + name, icon: 'DEL' }] };
+            });
+          }
+          toast('MCP INSTALLED: ' + pluginName);
+        }
+        beepAction();
+      } else {
+        btn.disabled = false; btn.textContent = '+ INSTALL';
+        toast('ERROR: ' + (d.error || 'Install failed'));
+      }
+    })
+    .catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
 }
 
 // ═══ CREATE NEW ITEMS ═══

@@ -624,6 +624,70 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     return;
   }
 
+  // Marketplace install
+  if (req.method === 'POST' && req.url === '/api/marketplace/install') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { type, sourcePath, mcpConfig } = JSON.parse(body);
+        const claudeDir = path.join(os.homedir(), '.claude');
+        const allowedBase = path.join(claudeDir, 'plugins', 'marketplaces');
+        const resolved = path.resolve(sourcePath);
+
+        // Security: source must be within marketplaces directory
+        if (!resolved.startsWith(allowedBase + path.sep)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden: path outside marketplace directory' }));
+          return;
+        }
+
+        if (type === 'plugin') {
+          const pluginName = path.basename(resolved);
+          const destPath = path.join(claudeDir, 'plugins', pluginName);
+          fs.cpSync(resolved, destPath, { recursive: true });
+
+          // Enable in settings.json
+          const settingsPath = path.join(claudeDir, 'settings.json');
+          let settings = {};
+          try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch(e) {}
+          if (!settings.enabledPlugins) settings.enabledPlugins = {};
+          settings.enabledPlugins[pluginName] = true;
+          fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, pluginName }));
+        } else if (type === 'mcp') {
+          if (!mcpConfig || typeof mcpConfig !== 'object') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'mcpConfig required for mcp type' }));
+            return;
+          }
+          const settingsPath = path.join(claudeDir, 'settings.json');
+          let settings = {};
+          try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch(e) {}
+          if (!settings.mcpServers) settings.mcpServers = {};
+          const mcpAdded = [];
+          for (const [name, cfg] of Object.entries(mcpConfig)) {
+            settings.mcpServers[name] = cfg;
+            mcpAdded.push(name);
+          }
+          fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, mcpAdded }));
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unknown type: ' + type }));
+        }
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // MCP server health check
   if (req.method === 'GET' && req.url === '/api/mcp-status') {
     const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
