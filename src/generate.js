@@ -1006,6 +1006,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <span class="waveform-label hidden" id="wf-label"></span>
   <div class="waveform hidden" id="waveform"></div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
+  <button class="tgl-btn on" id="cr-toggle" style="background:var(--tan);display:none" onclick="toggleCR()">LOG</button>
   <div class="computer-bar-toggles">
     <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleVoice(this)">VOICE</button>
     <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
@@ -2127,6 +2128,17 @@ function closeCR() {
   document.getElementById('cr').classList.remove('visible');
 }
 
+function toggleCR() {
+  var cr = document.getElementById('cr');
+  cr.classList.toggle('visible');
+}
+
+// Show LOG button after first response
+function showLogButton() {
+  var btn = document.getElementById('cr-toggle');
+  if (btn) btn.style.display = '';
+}
+
 function sendGlobal() {
   var input = document.getElementById('cb-in');
   var text = input.value.trim();
@@ -2178,6 +2190,7 @@ function sendGlobal() {
           beepReceive();
           speak(fullText);
           addMsg('ai', fullText);
+          showLogButton();
           return;
         }
         buffer += decoder.decode(result.value, { stream: true });
