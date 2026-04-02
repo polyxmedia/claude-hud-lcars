@@ -46,3 +46,13 @@ Free to use, modify, and share — commercial use not permitted.
 ## 2026-04-02 - feat: default chat to Sonnet, Discover model config (default Opus), fix Haiku option value
 
 ## 2026-04-02 - feat: seamless install/delete (no reload), LCARS confirm modal, fixed markdown panel padding
+
+## 2026-04-02 - test: add ESM-compatible syntax check for generated dashboard JS
+
+## 2026-04-02 - test: add ESM-compatible syntax check for generated dashboard JS
+
+## 2026-04-02 - chore: bump version to 1.3.0
+
+## 2026-04-02 - feat: add Marketplace tab — browse and install from local plugin marketplaces
+
+## 2026-04-02 - feat: add Marketplace tab — browse and install from local plugin marketplaces

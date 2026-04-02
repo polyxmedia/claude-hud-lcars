@@ -547,20 +547,23 @@ function gen() {
     if (m.env) cfg.env = m.env;
     D['sugg:mcp:'+m.name] = { t: m.name, tp: 'SUGGESTED MCP SERVER', m: m.cmd+' '+m.args.join(' '),
       b: '```json\n'+JSON.stringify(cfg,null,2)+'\n```\n\n'+m.desc,
+      _cfg: cfg,
       actions: [{ label: '+ INSTALL', cmd: 'install:mcp:'+m.name, icon: 'INSTALL' }] };
   });
   HOOK_SUGG.forEach(h => {
     D['sugg:hook:'+h.name] = { t: h.name, tp: 'SUGGESTED HOOK // '+h.event.toUpperCase(), m: h.event+(h.matcher?' // '+h.matcher:''),
       b: h.desc+'\n\n```bash\n'+h.cmd+'\n```',
+      _hook: { event: h.event, matcher: h.matcher||'', cmd: h.cmd },
       actions: [{ label: '+ INSTALL', cmd: 'install:hook:'+h.name, icon: 'INSTALL' }] };
   });
   marketItems.forEach(item => {
-    const mcpBody = item.mcpConfig ? '\\n\\n```json\\n' + JSON.stringify(item.mcpConfig, null, 2) + '\\n```' : '';
+    const mcpBody = item.mcpConfig ? '\n\n```json\n' + JSON.stringify(item.mcpConfig, null, 2) + '\n```' : '';
     D['mk:'+item.id] = {
       t: item.name,
       tp: item.type === 'mcp' ? 'MCP SERVER PLUGIN' : 'PLUGIN MODULE',
       m: item.marketplace + (item.author ? ' // ' + item.author : '') + (item.isInstalled ? ' // INSTALLED' : ''),
       b: (item.description || 'No description available.') + mcpBody,
+      _install: { type: item.type, sourcePath: item.sourcePath, mcpConfig: item.mcpConfig || null },
       actions: item.isInstalled
         ? [{ label: 'INSTALLED', cmd: '', icon: 'OK' }]
         : [{ label: item.type === 'mcp' ? '+ ADD MCP' : '+ INSTALL', cmd: 'mkinstall:' + item.id, icon: 'INSTALL' }]
@@ -955,9 +958,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .suggest-install:disabled{background:#2a2a2a;color:#555;cursor:default}
 
 /* ═══ MARKETPLACE ═══ */
-.mkt-filters{display:flex;gap:6px;padding:10px 16px 0;flex-wrap:wrap}
+.mkt-filters{display:flex;gap:6px;padding:10px 16px 0;flex-wrap:wrap;align-items:center}
 .mkt-filter-btn{font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:4px 12px;border:1.5px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer;border-radius:3px;transition:all 0.15s}
 .mkt-filter-btn.act{border-color:var(--orange);color:var(--orange);background:rgba(255,153,0,0.08)}
+.mkt-search{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;padding:4px 10px;border:1.5px solid var(--faint);background:#060606;color:var(--text);border-radius:3px;width:180px;outline:none;transition:border-color 0.15s}
+.mkt-search:focus{border-color:var(--orange)}
+.mkt-search::placeholder{color:var(--dim)}
 .mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:12px 16px;overflow-y:auto}
 .mkt-card{background:#0a0a0a;border:1px solid #222;border-radius:4px;padding:14px;cursor:pointer;transition:border-color 0.15s,background 0.15s;display:flex;flex-direction:column;gap:8px}
 .mkt-card:hover{border-color:var(--orange);background:#0f0f0f}
@@ -1828,6 +1834,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <button class="mkt-filter-btn" onclick="filterMkt('plugin',this)">PLUGINS</button>
           <button class="mkt-filter-btn" onclick="filterMkt('mcp',this)">MCP SERVERS</button>
           <button class="mkt-filter-btn" onclick="filterMkt('installed',this)">INSTALLED</button>
+          <input class="mkt-search" id="mkt-search" type="text" placeholder="SEARCH..." oninput="filterMkt(window._mktFilter||'all')" autocomplete="off" spellcheck="false">
         </div>
         ${marketItems.length === 0 ? '<div class="emp">No marketplace data found</div>' : `
         <div class="mkt-grid" id="mkt-grid">
@@ -2431,12 +2438,21 @@ function doAction(btn){
       }
     });
   } else if(icon==='INSTALL'){
+    if(cmd.startsWith('mkinstall:')){
+      var mkId=cmd.slice('mkinstall:'.length);
+      var mkd=window._D&&window._D['mk:'+mkId];
+      if(!mkd||!mkd._install){toast('Cannot find marketplace item');return;}
+      installMarketItem(btn,mkId,mkd._install.type,mkd._install.sourcePath,mkd._install.mcpConfig?JSON.stringify(mkd._install.mcpConfig):'');
+      return;
+    }
     var parts=cmd.split(':');
     var itype=parts[1], iname=parts.slice(2).join(':');
     var d2=window._D&&window._D['sugg:'+itype+':'+iname];
     if(!d2){toast('Cannot find suggestion data');return;}
     if(itype==='skill') installSuggestSkill(btn,iname,d2.b);
     else if(itype==='agent') installSuggestAgent(btn,iname,d2.b);
+    else if(itype==='mcp'&&d2._cfg) installSuggestMcp(btn,iname,JSON.stringify(d2._cfg));
+    else if(itype==='hook'&&d2._hook) installSuggestHook(btn,d2._hook.event,d2._hook.matcher,d2._hook.cmd);
     else toast('Use the INSTALL button on the card');
   } else {
     navigator.clipboard.writeText(cmd).then(function(){
@@ -2455,8 +2471,8 @@ function toast(msg){
 
 function hlJson(s) {
   var h = s.replace(/&/g,'&amp;').replace(new RegExp('<','g'),'&lt;').replace(new RegExp('>','g'),'&gt;');
-  h = h.replace(new RegExp('"([^"]*)"\\\\s*:','g'), '<span class="key">"$1"</span>:');
   h = h.replace(new RegExp('"([^"]*)"','g'), '<span class="str">"$1"</span>');
+  h = h.replace(new RegExp('<span class="str">"([^"]*)"</span>(\\\\s*):','g'), '<span class="key">"$1"</span>$2:');
   h = h.replace(new RegExp('\\\\b(true|false)\\\\b','g'), '<span class="bool">$1</span>');
   h = h.replace(new RegExp('\\\\b(null)\\\\b','g'), '<span class="kw">$1</span>');
   h = h.replace(new RegExp('\\\\b(-?\\\\d+\\\\.?\\\\d*)\\\\b','g'), '<span class="num">$1</span>');
@@ -2553,7 +2569,7 @@ function md(t) {
 function esc(s) {
   var d = document.createElement('div');
   d.textContent = s;
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g,'&quot;');
 }
 
 // ═══ LCARS SOUNDS (Web Audio API, no files) ═══
@@ -2930,13 +2946,18 @@ function updateActiveLine() {
 }
 
 function highlightEditor(text, filePath) {
-  var h = esc(text);
   var ext = filePath.split('.').pop().toLowerCase();
+  var h;
+  if (ext === 'json') {
+    h = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  } else {
+    h = esc(text);
+  }
 
   if (ext === 'json') {
-    // JSON highlighting
-    h = h.replace(new RegExp('"([^"]*)"\\\\s*:','g'), '<span class="hl-key">"$1"</span>:');
+    // JSON highlighting — wrap strings first, then re-wrap keys (avoids corrupting span attrs)
     h = h.replace(new RegExp('"([^"]*)"','g'), '<span class="hl-string">"$1"</span>');
+    h = h.replace(new RegExp('<span class="hl-string">"([^"]*)"</span>(\\\\s*):','g'), '<span class="hl-key">"$1"</span>$2:');
     h = h.replace(new RegExp('\\\\b(true|false)\\\\b','g'), '<span class="hl-bool">$1</span>');
     h = h.replace(new RegExp('\\\\b(null)\\\\b','g'), '<span class="hl-keyword">$1</span>');
     h = h.replace(new RegExp('\\\\b(-?\\\\d+\\\\.?\\\\d*)\\\\b','g'), '<span class="hl-number">$1</span>');
@@ -3815,15 +3836,17 @@ function installSuggestHook(btn, event, matcher, cmd) {
 }
 
 function filterMkt(type, btn) {
-  document.querySelectorAll('.mkt-filter-btn').forEach(function(b){b.classList.remove('act')});
-  btn.classList.add('act');
+  if(btn){ document.querySelectorAll('.mkt-filter-btn').forEach(function(b){b.classList.remove('act')}); btn.classList.add('act'); }
+  window._mktFilter = type;
+  var q = (document.getElementById('mkt-search')||{}).value||'';
+  var qLow = q.toLowerCase().trim();
   var cards = document.querySelectorAll('#mkt-grid .mkt-card');
   cards.forEach(function(card) {
     var cardType = card.getAttribute('data-mkt-type');
     var isInstalled = card.classList.contains('installed');
-    if (type === 'all') card.style.display = '';
-    else if (type === 'installed') card.style.display = isInstalled ? '' : 'none';
-    else card.style.display = cardType === type ? '' : 'none';
+    var typeOk = type === 'all' || (type === 'installed' ? isInstalled : cardType === type);
+    var textOk = !qLow || (card.textContent||'').toLowerCase().indexOf(qLow) !== -1;
+    card.style.display = (typeOk && textOk) ? '' : 'none';
   });
 }
 
