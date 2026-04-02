@@ -2104,10 +2104,11 @@ function isToggleOn(id) {
   return btn && btn.classList.contains('on');
 }
 
-function beepNav() { lcarsBeep(1200, 0.08); }
-function beepOpen() { lcarsBeep(800, 0.06); setTimeout(function(){lcarsBeep(1600, 0.06)}, 60); }
-function beepAction() { lcarsBeep(1000, 0.05); }
-function beepSend() { lcarsBeep(600, 0.05); setTimeout(function(){lcarsBeep(900, 0.08)}, 80); }
+var _bootComplete = false;
+function beepNav() { if (_bootComplete) lcarsBeep(1200, 0.08); }
+function beepOpen() { if (_bootComplete) { lcarsBeep(800, 0.06); setTimeout(function(){lcarsBeep(1600, 0.06)}, 60); } }
+function beepAction() { if (_bootComplete) lcarsBeep(1000, 0.05); }
+function beepSend() { if (_bootComplete) { lcarsBeep(600, 0.05); setTimeout(function(){lcarsBeep(900, 0.08)}, 80); } }
 function beepReceive() { lcarsBeep(440, 0.12); }
 
 // Patch nav and open_ to add sounds
@@ -4278,6 +4279,7 @@ function loadEnterprise() {
 
   setTimeout(function() {
     boot.classList.add('done');
+    _bootComplete = true;
     setTimeout(function() { boot.remove(); }, 700);
   }, 3200);
 })();
