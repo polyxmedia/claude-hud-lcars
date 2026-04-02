@@ -1,7 +1,7 @@
 # claude-hud-lcars
 
 <p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Star_Trek_symbol.svg/240px-Star_Trek_symbol.svg.png" alt="Starfleet" width="120">
+  <img src="assets/starfleet.svg" alt="Starfleet" width="120">
 </p>
 
 <p align="center">
