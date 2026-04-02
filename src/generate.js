@@ -688,15 +688,32 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   background:#08080aee;border-top:2px solid var(--orange);
   padding:16px 20px;z-index:49;
   display:none;font-size:0.88rem;line-height:1.7;color:var(--text);
+  transition:max-height 0.2s ease;
 }
 .computer-response.visible{display:block}
-.computer-response .cr-close{
-  position:sticky;top:0;float:right;
+.computer-response.minimised{
+  max-height:36px;overflow:hidden;padding:8px 20px;
+  cursor:pointer;
+}
+.computer-response.minimised #cr-body{opacity:0.4;pointer-events:none}
+.computer-response .cr-controls{
+  position:sticky;top:0;float:right;display:flex;gap:4px;z-index:2;
+}
+.computer-response .cr-btn{
   background:var(--orange);border:none;color:var(--bg);
   font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;
   padding:3px 10px;cursor:pointer;letter-spacing:0.08em;
-  border-radius:10px;margin-left:8px;
+  border-radius:10px;
 }
+.computer-response .cr-btn.cr-min{background:var(--blue)}
+.computer-response .cr-btn:hover{filter:brightness(1.2)}
+.cr-mini-label{
+  display:none;font-family:'Antonio',sans-serif;font-size:0.7rem;
+  color:var(--orange);letter-spacing:0.1em;text-transform:uppercase;
+  cursor:pointer;
+}
+.computer-response.minimised .cr-controls{display:none}
+.computer-response.minimised .cr-mini-label{display:inline}
 /* ═══ IN-HUD EDITOR ═══ */
 .hud-editor{display:none;flex-direction:column;height:100%;min-height:0}
 .hud-editor.active{display:flex}
@@ -770,11 +787,33 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .hud-editor-highlight .hl-bold{color:#eee;font-weight:600}
 .hud-editor-highlight .hl-bullet{color:var(--orange)}
 
-.computer-response h1,.computer-response h2,.computer-response h3{font-family:'Antonio',sans-serif;text-transform:uppercase;color:var(--peach);margin:16px 0 8px}
-.computer-response code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px}
-.computer-response pre{background:#000;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan)}
-.computer-response pre code{background:none;color:inherit;padding:0}
+.computer-response h1,.computer-response h2,.computer-response h3{font-family:'Antonio',sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 8px;line-height:1.2}
+.computer-response h1{font-size:1.3rem;color:var(--peach);border-bottom:2px solid #1a1a1e;padding-bottom:6px}
+.computer-response h2{font-size:1.1rem;color:var(--peach)}
+.computer-response h3{font-size:0.95rem;color:var(--tan)}
+.computer-response p{margin-bottom:10px}
+.computer-response code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px;font-size:0.84rem}
+.computer-response pre{background:#000;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan);position:relative}
+.computer-response pre::before{content:attr(data-lang);position:absolute;top:4px;right:8px;font-size:0.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em}
+.computer-response pre code{background:none;color:inherit;padding:0;font-size:inherit}
+.computer-response pre .kw{color:var(--blue)}
+.computer-response pre .str{color:var(--peach)}
+.computer-response pre .num{color:var(--orange)}
+.computer-response pre .key{color:var(--cyan)}
+.computer-response pre .bool{color:var(--salmon)}
+.computer-response pre .cmt{color:var(--dim);font-style:italic}
+.computer-response pre .punc{color:#888}
 .computer-response strong{color:#eee}
+.computer-response em{color:var(--lavender);font-style:italic}
+.computer-response ul,.computer-response ol{padding-left:22px;margin-bottom:10px}
+.computer-response li{margin-bottom:4px}
+.computer-response li::marker{color:var(--orange)}
+.computer-response table{width:100%;border-collapse:collapse;margin:10px 0;font-size:0.82rem}
+.computer-response th{text-align:left;padding:8px;border-bottom:2px solid var(--orange);color:var(--orange);font-weight:600;text-transform:uppercase;font-size:0.72rem;letter-spacing:0.08em}
+.computer-response td{padding:6px 8px;border-bottom:1px solid #1a1a1e}
+.computer-response blockquote{border-left:3px solid var(--tan);padding-left:14px;color:var(--dim);margin:10px 0}
+.computer-response a{color:var(--orange);text-decoration:none}
+.computer-response a:hover{text-decoration:underline}
 
 /* ═══ WAVEFORM VISUALIZER ═══ */
 .waveform{
@@ -1165,7 +1204,11 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 <div class="computer-response" id="cr">
-  <button class="cr-close" onclick="closeCR()">DISMISS</button>
+  <div class="cr-controls">
+    <button class="cr-btn cr-min" onclick="minimiseCR()">MINIMISE</button>
+    <button class="cr-btn" onclick="closeCR()">DISMISS</button>
+  </div>
+  <span class="cr-mini-label" onclick="expandCR()">COMPUTER RESPONSE // CLICK TO EXPAND</span>
   <div id="cr-body"></div>
 </div>
 
@@ -1177,8 +1220,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <span class="waveform-label hidden" id="wf-label"></span>
   <div class="waveform hidden" id="waveform"></div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
-  <button class="tgl-btn on" id="cr-toggle" style="background:var(--tan);display:none" onclick="toggleCR()">LOG</button>
   <div class="computer-bar-toggles">
+    <button class="tgl-btn on" id="cr-toggle" style="background:var(--tan);display:none" onclick="toggleCR()">LOG</button>
     <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleVoice(this)">VOICE</button>
     <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
   </div>
@@ -1518,6 +1561,15 @@ function toggleMic() {
 }
 
 function startMic() {
+  // Never start listening while the computer is speaking
+  if (computerSpeaking) return;
+
+  // Stop any existing recognition before starting fresh
+  if (recognition) {
+    try { recognition.abort(); } catch(e) {}
+    recognition = null;
+  }
+
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     toast('Speech recognition not supported in this browser');
@@ -1553,7 +1605,31 @@ function startMic() {
         interim += e.results[i][0].transcript;
       }
     }
-    input.value = finalTranscript + interim;
+
+    var fullText = (finalTranscript + interim).trim();
+
+    // Echo filtering: if computer is speaking, check if this is echo
+    if (computerSpeaking && fullText) {
+      var heard = fullText.toLowerCase().replace(new RegExp('[^a-z\\\\s]','g'), '').trim();
+      var words = heard.split(new RegExp('\\\\s+'));
+
+      // Check if what we heard is a substring of what was spoken (echo)
+      if (lastSpokenText && lastSpokenText.indexOf(heard) !== -1) {
+        return; // Ignore echo
+      }
+
+      // If user says 2+ words that are NOT in the spoken text, it is an interrupt
+      var newWords = words.filter(function(w) { return w.length > 2 && lastSpokenText.indexOf(w) === -1; });
+      if (newWords.length >= 2) {
+        // Intentional interrupt, stop the computer
+        stopSpeaking();
+        toast('INTERRUPTED');
+      } else {
+        return; // Likely echo, ignore
+      }
+    }
+
+    input.value = fullText;
     // Update live transcription display
     var liveEl = document.getElementById('live-transcript');
     if (liveEl) {
@@ -1564,11 +1640,20 @@ function startMic() {
   recognition.onend = function() {
     micActive = false;
     hideWaveform();
+    var vb = document.getElementById('voice-toggle');
+    if (vb) vb.style.animation = '';
     if (finalTranscript.trim()) {
       beepSend();
       sendGlobal();
     } else {
-      cr.classList.remove('visible');
+      // No speech detected but voice mode still on, restart after a short pause
+      if (isToggleOn('voice-toggle') && !computerSpeaking) {
+        setTimeout(function() {
+          if (isToggleOn('voice-toggle') && !micActive && !computerSpeaking) {
+            startListening();
+          }
+        }, 500);
+      }
     }
   };
 
@@ -1840,23 +1925,43 @@ function startListening() {
   startMic();
 }
 
-// Auto-restart listening after computer finishes speaking (voice conversation loop)
+// Track if computer is speaking (any engine)
+var computerSpeaking = false;
+var lastSpokenText = '';
+
+// Auto-restart listening after computer finishes speaking
 var _origSpeakForLoop = speak;
+var _speechStartedAt = 0;
 speak = function(text) {
+  computerSpeaking = true;
+  _speechStartedAt = Date.now();
+  lastSpokenText = text.toLowerCase().replace(new RegExp('[^a-z\\\\s]','g'), '').trim();
+
+  // Stop mic immediately so it doesn't hear the computer
+  if (micActive) stopMic();
+
   _origSpeakForLoop(text);
-  // After speech ends, restart listening if voice mode still on
-  if (window.speechSynthesis && isToggleOn('voice-toggle')) {
-    var checkDone = setInterval(function() {
-      if (!speechSynthesis.speaking) {
-        clearInterval(checkDone);
-        setTimeout(function() {
-          if (isToggleOn('voice-toggle') && !micActive) {
-            startListening();
-          }
-        }, 500);
-      }
-    }, 200);
-  }
+
+  // Poll for speech end (works for both browser TTS and ElevenLabs)
+  // Wait at least 1s before checking, so async audio has time to start
+  var checkDone = setInterval(function() {
+    // Don't check until audio has had time to start playing
+    if (Date.now() - _speechStartedAt < 1000) return;
+
+    var browserSpeaking = window.speechSynthesis && speechSynthesis.speaking;
+    var elevenPlaying = currentAudio && !currentAudio.paused && !currentAudio.ended;
+    if (!browserSpeaking && !elevenPlaying) {
+      clearInterval(checkDone);
+      computerSpeaking = false;
+      lastSpokenText = '';
+      // Wait 2s after speech ends to let echo fully dissipate
+      setTimeout(function() {
+        if (isToggleOn('voice-toggle') && !micActive && !computerSpeaking) {
+          startListening();
+        }
+      }, 2000);
+    }
+  }, 300);
 };
 
 // Interrupt speech on any user action
@@ -2482,12 +2587,28 @@ function addMsg(role, text) {
 }
 
 function closeCR() {
-  document.getElementById('cr').classList.remove('visible');
+  var cr = document.getElementById('cr');
+  cr.classList.remove('visible');
+  cr.classList.remove('minimised');
+}
+
+function minimiseCR() {
+  document.getElementById('cr').classList.add('minimised');
+  beepNav();
+}
+
+function expandCR() {
+  document.getElementById('cr').classList.remove('minimised');
+  beepOpen();
 }
 
 function toggleCR() {
   var cr = document.getElementById('cr');
-  cr.classList.toggle('visible');
+  if (cr.classList.contains('minimised')) {
+    expandCR();
+  } else {
+    cr.classList.toggle('visible');
+  }
 }
 
 // Show LOG button after first response
@@ -2513,15 +2634,22 @@ function sendGlobal() {
   addMsg('user', text);
   chatHistory.push({ role: 'user', content: text });
 
-  // Show response overlay
+  // Show response overlay (expand if minimised)
   var cr = document.getElementById('cr');
   var crBody = document.getElementById('cr-body');
+  cr.classList.remove('minimised');
   crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">YOU</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div><span style="color:var(--dim)">Processing...</span>';
   cr.classList.add('visible');
 
   var btn = document.getElementById('cb-send');
   btn.disabled = true;
   btn.textContent = '...';
+
+  // Safety: re-enable after 60s if stream hangs
+  var safetyTimer = setTimeout(function() {
+    btn.disabled = false;
+    btn.textContent = 'SEND';
+  }, 60000);
 
   var fullText = '';
 
@@ -2541,6 +2669,7 @@ function sendGlobal() {
     function pump() {
       return reader.read().then(function(result) {
         if (result.done) {
+          clearTimeout(safetyTimer);
           chatHistory.push({ role: 'assistant', content: fullText });
           btn.disabled = false;
           btn.textContent = 'SEND';
@@ -2574,6 +2703,7 @@ function sendGlobal() {
 
     return pump();
   }).catch(function(e) {
+    clearTimeout(safetyTimer);
     crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
     addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
