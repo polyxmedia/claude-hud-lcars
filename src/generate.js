@@ -312,8 +312,13 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .mcp-card-status{
   width:8px;height:8px;border-radius:50%;flex-shrink:0;
-  background:var(--green);box-shadow:0 0 6px var(--green);
+  background:var(--tan);box-shadow:0 0 4px rgba(204,153,102,0.4);
 }
+.mcp-card-status.ready{background:var(--green);box-shadow:0 0 6px var(--green)}
+.mcp-card-status.error{background:var(--red);box-shadow:0 0 6px var(--red)}
+.mcp-card-status.missing{background:var(--orange);box-shadow:0 0 6px rgba(255,153,0,0.4)}
+.mcp-card-status.checking{animation:status-blink 0.8s infinite}
+@keyframes status-blink{0%,100%{opacity:1}50%{opacity:0.3}}
 .mcp-card-name{
   font-family:'Antonio',sans-serif;font-size:1rem;font-weight:600;
   text-transform:uppercase;letter-spacing:0.06em;color:var(--text);
@@ -331,12 +336,28 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card-bar{
   height:3px;background:#1a1a1e;margin-top:10px;position:relative;overflow:hidden;
 }
-.mcp-card-bar::after{
-  content:'';position:absolute;top:0;left:0;height:100%;width:100%;
-  background:linear-gradient(90deg,var(--blue),var(--cyan));
-  animation:mcp-pulse 2s ease-in-out infinite;
+.mcp-card-bar .bar-fill{
+  position:absolute;top:0;left:0;height:100%;width:100%;
+  transition:width 0.4s ease,background 0.3s;
 }
-@keyframes mcp-pulse{0%,100%{transform:translateX(-100%)}50%{transform:translateX(0)}}
+.mcp-card-bar .bar-fill.ready{background:var(--green);width:100%}
+.mcp-card-bar .bar-fill.error{background:var(--red);width:30%}
+.mcp-card-bar .bar-fill.missing{background:var(--orange);width:60%}
+.mcp-card-bar .bar-fill.unknown{background:var(--tan);width:50%}
+.mcp-card-bar .bar-fill.checking{
+  background:linear-gradient(90deg,var(--blue),var(--cyan));
+  width:100%;animation:mcp-scan 1.5s ease-in-out infinite;
+}
+@keyframes mcp-scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.mcp-card-status-label{
+  font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;
+  margin-top:6px;
+}
+.mcp-card-status-label.ready{color:var(--green)}
+.mcp-card-status-label.error{color:var(--red)}
+.mcp-card-status-label.missing{color:var(--orange)}
+.mcp-card-status-label.unknown{color:var(--tan)}
+.mcp-card-status-label.checking{color:var(--blue)}
 
 /* ═══ DETAIL PANEL (PADD) ═══ */
 .dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative}
@@ -825,9 +846,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         ${mcp.length===0?'<div class="emp">No servers connected</div>':`
         <div class="mcp-grid">
           ${mcp.map(s=>`
-          <div class="mcp-card" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}">
+          <div class="mcp-card" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}" data-mcp="${esc(s.name)}">
             <div class="mcp-card-top">
-              <div class="mcp-card-status"></div>
+              <div class="mcp-card-status checking" id="mcp-dot-${esc(s.name)}"></div>
               <div class="mcp-card-name">${esc(s.name)}</div>
               ${s.hasEnv?'<span class="mcp-card-cat">ENV</span>':''}
             </div>
@@ -841,7 +862,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="mcp-card-val" style="color:var(--dim)">${esc(s.args.join(' '))}</span>
               </div>`:''}
             </div>
-            <div class="mcp-card-bar"></div>
+            <div class="mcp-card-bar"><div class="bar-fill checking"></div></div>
+            <div class="mcp-card-status-label checking" id="mcp-label-${esc(s.name)}">CHECKING</div>
           </div>`).join('')}
         </div>`}
       </div>
@@ -1810,19 +1832,25 @@ document.addEventListener('click', function(e) {
 });
 
 // ═══ CONFIG PANEL ═══
+var _loadingConfig = false;
 function loadConfig() {
+  _loadingConfig = true;
   try {
     var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
-    if (cfg.voiceEngine === 'elevenlabs') {
-      setLcarsValue('cfg-voice-engine-wrap', 'elevenlabs');
-      onVoiceEngineChange();
-    }
+    // Set key and voice BEFORE showing the panel so they're populated
     if (cfg.elevenKey) {
       var inp = document.getElementById('cfg-eleven-key');
       if (inp) inp.value = cfg.elevenKey;
     }
     if (cfg.elevenVoice) {
-      document.getElementById('cfg-eleven-voice').value = cfg.elevenVoice;
+      var vi = document.getElementById('cfg-eleven-voice');
+      if (vi) vi.value = cfg.elevenVoice;
+    }
+    // Now show the panel
+    if (cfg.voiceEngine === 'elevenlabs') {
+      setLcarsValue('cfg-voice-engine-wrap', 'elevenlabs');
+      var fields = document.getElementById('cfg-eleven-fields');
+      if (fields) fields.style.display = 'block';
     }
     if (cfg.sfx === 'off') {
       setLcarsValue('cfg-sfx-wrap', 'off');
@@ -1836,9 +1864,11 @@ function loadConfig() {
       loadVoiceBrowser();
     }
   } catch(e) {}
+  _loadingConfig = false;
 }
 
 function saveConfig() {
+  if (_loadingConfig) return;
   var cfg = {
     voiceEngine: getLcarsValue('cfg-voice-engine-wrap'),
     elevenKey: document.getElementById('cfg-eleven-key').value,
@@ -2152,7 +2182,53 @@ setTimeout(function() {
       }
     }
   } catch(e) {}
+  checkMcpStatus();
 }, 100);
+
+// ═══ MCP STATUS CHECK ═══
+function checkMcpStatus() {
+  var labels = {
+    ready: 'ONLINE',
+    error: 'CMD NOT FOUND',
+    missing: 'FILE MISSING',
+    unknown: 'CONFIGURED',
+  };
+
+  if (!window.HUD_LIVE) {
+    document.querySelectorAll('.mcp-card').forEach(function(card) {
+      setMcpStatus(card.getAttribute('data-mcp'), 'unknown');
+    });
+    return;
+  }
+
+  fetch('/api/mcp-status').then(function(r) {
+    return r.json();
+  }).then(function(statuses) {
+    for (var name in statuses) {
+      setMcpStatus(name, statuses[name]);
+    }
+    document.querySelectorAll('.mcp-card').forEach(function(card) {
+      var n = card.getAttribute('data-mcp');
+      if (!(n in statuses)) setMcpStatus(n, 'unknown');
+    });
+  }).catch(function() {
+    document.querySelectorAll('.mcp-card').forEach(function(card) {
+      setMcpStatus(card.getAttribute('data-mcp'), 'unknown');
+    });
+  });
+
+  function setMcpStatus(name, status) {
+    var dot = document.getElementById('mcp-dot-' + name);
+    var label = document.getElementById('mcp-label-' + name);
+    var card = document.querySelector('[data-mcp="' + name + '"]');
+    if (!dot || !label || !card) return;
+    dot.className = 'mcp-card-status ' + status;
+    label.className = 'mcp-card-status-label ' + status;
+    label.textContent = labels[status] || status.toUpperCase();
+    var bar = card.querySelector('.bar-fill');
+    if (bar) bar.className = 'bar-fill ' + status;
+  }
+}
 
 // Escape stops speech
 document.addEventListener('keydown', function(e) {

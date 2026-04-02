@@ -104,6 +104,48 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // MCP server health check
+  if (req.method === 'GET' && req.url === '/api/mcp-status') {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const servers = settings.mcpServers || {};
+      const { execSync } = await import('child_process');
+      const results = {};
+
+      for (const [name, config] of Object.entries(servers)) {
+        try {
+          // Check if the command binary exists
+          const cmd = config.command;
+          execSync('which ' + cmd, { stdio: 'pipe', timeout: 2000 });
+
+          // Check if the entry point file exists (for node servers)
+          if (config.args && config.args.length > 0) {
+            const mainArg = config.args[config.args.length - 1];
+            if (mainArg && (mainArg.endsWith('.js') || mainArg.endsWith('.mjs'))) {
+              if (fs.existsSync(mainArg)) {
+                results[name] = 'ready';
+              } else {
+                results[name] = 'missing'; // entry point file missing
+              }
+              continue;
+            }
+          }
+          results[name] = 'ready'; // command exists
+        } catch {
+          results[name] = 'error'; // command not found
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(results));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Voice config - tells client what's available
   if (req.method === 'GET' && req.url === '/api/voice-config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
