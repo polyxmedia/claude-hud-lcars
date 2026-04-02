@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/about.png" alt="claude-hud-lcars about tab" width="100%">
+  <a href="assets/about.png">About tab →</a>
 </p>
 
 ---
@@ -61,7 +61,8 @@ Sections, each one clickable:
 - **Tactical** an interactive force-directed graph showing your entire setup as a Star Trek sensor display. Drag nodes around, hover for detailed info cards, click to navigate. Sub-tabs for the systems map and a 3D Enterprise-D model
 - **Q** talk to Q from the Continuum. He'll roast your setup, call you "mon capitaine", and appear uninvited every few minutes
 - **Comms** scrollable log of all chat messages with full markdown rendering
-- **Config** model selector (Haiku/Sonnet/Opus), voice engine, ElevenLabs setup, ship name, ship theme, sound effects
+- **Marketplace** browse and one-click install MCP servers from local marketplace directories. Hit LOAD REGISTRY to pull from the official MCP registry and npm, search and filter the results, install directly into `settings.json`
+- **Config** model selector (Opus/Sonnet/Haiku), voice engine, ElevenLabs setup, ship name, ship theme, sound effects, server restart and update controls
 - **About** what this is, who built it, links
 
 Every row is clickable. The detail panel slides open on the right, renders the markdown properly with headers, tables, code blocks, lists, the works. JSON configs get syntax highlighted automatically with color-coded keys, strings, numbers, and booleans. It genuinely looks like you're reading a classified Starfleet briefing.
@@ -143,7 +144,7 @@ If you installed globally:
 npm update -g claude-hud-lcars
 ```
 
-In live server mode there's also an **UPDATE** button in **CONFIG → Server Info** that pulls the latest from npm and restarts the server automatically, no terminal needed.
+In live server mode there are also **RESTART** and **UPDATE** buttons in **CONFIG → Server Info**. RESTART picks up any config changes without touching the terminal. UPDATE pulls the latest from npm and restarts automatically.
 
 ## CLI options
 
@@ -166,7 +167,7 @@ Environment:
 | Variable | Default | What it does |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | (none) | Required for COMPUTER bar chat. Get one from [console.anthropic.com](https://console.anthropic.com/) |
-| `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Which model the COMPUTER bar talks to (also configurable in the CONFIG panel) |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Which model the COMPUTER bar talks to (also configurable in the CONFIG panel) |
 | `PORT` | `3200` | Server port for live mode |
 | `CLAUDE_HUD_DIRS` | (none) | Extra directories to scan for `.mcp.json` files, colon-separated. e.g. `~/work:~/clients` |
 
@@ -178,7 +179,6 @@ The whole thing is a Node.js script that walks your `~/.claude/` directory tree:
 ~/.claude/skills/*/SKILL.md        → skill definitions with frontmatter
 ~/.claude/agents/*.md              → agent definitions
 ~/.claude/settings.json            → hooks, MCP servers, plugins, env vars
-~/.claude/settings.local.json      → local settings overrides
 ~/.claude/projects/*/memory/*.md   → memory files across all projects
 ~/.claude/projects/*/CLAUDE.md     → project-level CLAUDE.md files
 ~/.claude/sessions/*.json          → session metadata
