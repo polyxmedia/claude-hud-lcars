@@ -122,6 +122,108 @@ function getPlugins(s) {
   return Object.entries(s.enabledPlugins).map(([id, en]) => ({ id, on: !!en }));
 }
 
+function getSettings(claudeDir) {
+  const p = path.join(claudeDir, 'settings.json');
+  try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf-8')) : null; }
+  catch(e) { return null; }
+}
+
+function getMcpServers(s, claudeDir) {
+  const out = [];
+  const seen = new Set();
+  if (s?.mcpServers) {
+    for (const [name, c] of Object.entries(s.mcpServers)) {
+      out.push(parseMcpEntry(name, c, 'settings.json'));
+      seen.add(name);
+    }
+  }
+  const homeMcp = path.join(claudeDir, '.mcp.json');
+  if (fs.existsSync(homeMcp)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(homeMcp, 'utf-8'));
+      if (data.mcpServers) {
+        for (const [name, c] of Object.entries(data.mcpServers)) {
+          if (!seen.has(name)) { out.push(parseMcpEntry(name, c, '.mcp.json')); seen.add(name); }
+        }
+      }
+    } catch(e) {}
+  }
+  return out;
+}
+
+function getSessionCount(claudeDir) {
+  const d = path.join(claudeDir, 'sessions');
+  return fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory()).length : 0;
+}
+
+function getSessions(claudeDir) {
+  const out = [];
+  const d = path.join(claudeDir, 'sessions');
+  if (!fs.existsSync(d)) return out;
+  for (const f of fs.readdirSync(d)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(path.join(d, f), 'utf-8'));
+      out.push({
+        id: raw.sessionId || f.replace('.json', ''),
+        pid: raw.pid || '',
+        cwd: raw.cwd || '',
+        project: (raw.cwd || '').split('/').slice(-2).join('/'),
+        started: raw.startedAt || 0,
+        kind: raw.kind || 'unknown',
+        entry: raw.entrypoint || '',
+      });
+    } catch(e) {}
+  }
+  return out.sort((a, b) => b.started - a.started);
+}
+
+function getHistory(claudeDir) {
+  const p = path.join(claudeDir, 'history.jsonl');
+  if (!fs.existsSync(p)) return [];
+  const out = [];
+  try {
+    const lines = fs.readFileSync(p, 'utf-8').split('\n').filter(l => l.trim());
+    for (const line of lines.slice(-200)) {
+      try {
+        const h = JSON.parse(line);
+        out.push({
+          msg: (h.display || '').slice(0, 120),
+          ts: h.timestamp || 0,
+          project: (h.project || '').split('/').slice(-2).join('/'),
+          sid: h.sessionId || '',
+        });
+      } catch(e) {}
+    }
+  } catch(e) {}
+  return out;
+}
+
+function getClaudeMdFiles(claudeDir) {
+  const out = [];
+  const globalPath = path.join(claudeDir, 'CLAUDE.md');
+  if (fs.existsSync(globalPath)) {
+    try {
+      const raw = fs.readFileSync(globalPath, 'utf-8');
+      out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length });
+    } catch(e) {}
+  }
+  const projDir = path.join(claudeDir, 'projects');
+  if (fs.existsSync(projDir)) {
+    for (const p of fs.readdirSync(projDir, { withFileTypes: true })) {
+      if (!p.isDirectory()) continue;
+      const cp = path.join(projDir, p.name, 'CLAUDE.md');
+      if (!fs.existsSync(cp)) continue;
+      try {
+        const raw = fs.readFileSync(cp, 'utf-8');
+        const proj = p.name.replace(/-/g, '/').replace(/^\//, '');
+        out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length });
+      } catch(e) {}
+    }
+  }
+  return out;
+}
+
 function getEnv(s) { return s?.env || {}; }
 
 function esc(s) {
@@ -578,5 +680,333 @@ describe('escJ', () => {
   test('output is valid JSON', () => {
     const out = escJ({ key: '<value>' });
     assert.doesNotThrow(() => JSON.parse(out));
+  });
+});
+
+// ── getSettings ───────────────────────────────────────────────────────────────
+
+describe('getSettings', () => {
+  test('returns null when settings.json does not exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.equal(getSettings(tmp), null); } finally { rimraf(tmp); }
+  });
+
+  test('parses valid settings.json', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'settings.json'), JSON.stringify({ env: { FOO: 'bar' } }));
+      const s = getSettings(tmp);
+      assert.deepEqual(s.env, { FOO: 'bar' });
+    } finally { rimraf(tmp); }
+  });
+
+  test('returns null on malformed JSON', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'settings.json'), '{ not valid json }');
+      assert.equal(getSettings(tmp), null);
+    } finally { rimraf(tmp); }
+  });
+
+  test('returns null on empty file', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'settings.json'), '');
+      assert.equal(getSettings(tmp), null);
+    } finally { rimraf(tmp); }
+  });
+
+  test('parses settings with mcpServers and hooks', () => {
+    const tmp = makeTmpDir();
+    try {
+      const data = { mcpServers: { boost: { command: 'php', args: ['artisan'] } }, hooks: {} };
+      fs.writeFileSync(path.join(tmp, 'settings.json'), JSON.stringify(data));
+      const s = getSettings(tmp);
+      assert.ok(s.mcpServers.boost);
+      assert.equal(s.mcpServers.boost.command, 'php');
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── getMcpServers ─────────────────────────────────────────────────────────────
+
+describe('getMcpServers', () => {
+  test('returns empty when settings has no mcpServers', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getMcpServers({}, tmp), []); } finally { rimraf(tmp); }
+  });
+
+  test('returns empty when settings is null', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getMcpServers(null, tmp), []); } finally { rimraf(tmp); }
+  });
+
+  test('reads servers from settings.mcpServers', () => {
+    const tmp = makeTmpDir();
+    try {
+      const s = { mcpServers: { myserver: { command: 'node', args: ['srv.js'] } } };
+      const servers = getMcpServers(s, tmp);
+      assert.equal(servers.length, 1);
+      assert.equal(servers[0].name, 'myserver');
+      assert.equal(servers[0].source, 'settings.json');
+    } finally { rimraf(tmp); }
+  });
+
+  test('reads servers from .mcp.json in claudeDir', () => {
+    const tmp = makeTmpDir();
+    try {
+      const mcp = { mcpServers: { remote: { command: 'npx', args: ['remote-pkg'] } } };
+      fs.writeFileSync(path.join(tmp, '.mcp.json'), JSON.stringify(mcp));
+      const servers = getMcpServers({}, tmp);
+      assert.equal(servers.length, 1);
+      assert.equal(servers[0].name, 'remote');
+      assert.equal(servers[0].source, '.mcp.json');
+    } finally { rimraf(tmp); }
+  });
+
+  test('deduplicates servers by name — settings.json wins', () => {
+    const tmp = makeTmpDir();
+    try {
+      const s = { mcpServers: { shared: { command: 'node', args: [] } } };
+      const mcp = { mcpServers: { shared: { command: 'npx', args: ['other'] } } };
+      fs.writeFileSync(path.join(tmp, '.mcp.json'), JSON.stringify(mcp));
+      const servers = getMcpServers(s, tmp);
+      assert.equal(servers.length, 1);
+      assert.equal(servers[0].source, 'settings.json');
+    } finally { rimraf(tmp); }
+  });
+
+  test('ignores malformed .mcp.json without crashing', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, '.mcp.json'), '{ bad json }');
+      assert.doesNotThrow(() => getMcpServers({}, tmp));
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── getSessionCount ───────────────────────────────────────────────────────────
+
+describe('getSessionCount', () => {
+  test('returns 0 when sessions dir does not exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.equal(getSessionCount(tmp), 0); } finally { rimraf(tmp); }
+  });
+
+  test('returns 0 when sessions dir is empty', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(tmp, 'sessions'));
+      assert.equal(getSessionCount(tmp), 0);
+    } finally { rimraf(tmp); }
+  });
+
+  test('counts only directories, not files', () => {
+    const tmp = makeTmpDir();
+    try {
+      const sessDir = path.join(tmp, 'sessions');
+      fs.mkdirSync(sessDir);
+      fs.mkdirSync(path.join(sessDir, 'session-1'));
+      fs.mkdirSync(path.join(sessDir, 'session-2'));
+      fs.writeFileSync(path.join(sessDir, 'not-a-dir.json'), '{}');
+      assert.equal(getSessionCount(tmp), 2);
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── getSessions ───────────────────────────────────────────────────────────────
+
+describe('getSessions', () => {
+  test('returns empty array when sessions dir does not exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getSessions(tmp), []); } finally { rimraf(tmp); }
+  });
+
+  test('parses a session file', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'sessions');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'abc123.json'), JSON.stringify({
+        sessionId: 'abc123', pid: 99, cwd: '/Users/andre/Code/myproject',
+        startedAt: 1700000000, kind: 'interactive', entrypoint: 'index.js',
+      }));
+      const sessions = getSessions(tmp);
+      assert.equal(sessions.length, 1);
+      assert.equal(sessions[0].id, 'abc123');
+      assert.equal(sessions[0].pid, 99);
+      assert.equal(sessions[0].project, 'Code/myproject');
+      assert.equal(sessions[0].started, 1700000000);
+      assert.equal(sessions[0].kind, 'interactive');
+    } finally { rimraf(tmp); }
+  });
+
+  test('falls back to filename when sessionId missing', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'sessions');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'fallback.json'), JSON.stringify({ cwd: '/a/b', startedAt: 1 }));
+      assert.equal(getSessions(tmp)[0].id, 'fallback');
+    } finally { rimraf(tmp); }
+  });
+
+  test('skips malformed session files without crashing', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'sessions');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'bad.json'), 'not json at all');
+      assert.doesNotThrow(() => getSessions(tmp));
+      assert.deepEqual(getSessions(tmp), []);
+    } finally { rimraf(tmp); }
+  });
+
+  test('ignores non-.json files', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'sessions');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'readme.txt'), 'ignore');
+      assert.deepEqual(getSessions(tmp), []);
+    } finally { rimraf(tmp); }
+  });
+
+  test('sorts sessions by startedAt descending', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'sessions');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'old.json'), JSON.stringify({ sessionId: 'old', startedAt: 1000 }));
+      fs.writeFileSync(path.join(d, 'new.json'), JSON.stringify({ sessionId: 'new', startedAt: 9000 }));
+      const sessions = getSessions(tmp);
+      assert.equal(sessions[0].id, 'new');
+      assert.equal(sessions[1].id, 'old');
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── getHistory ────────────────────────────────────────────────────────────────
+
+describe('getHistory', () => {
+  test('returns empty array when history.jsonl does not exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getHistory(tmp), []); } finally { rimraf(tmp); }
+  });
+
+  test('parses valid history lines', () => {
+    const tmp = makeTmpDir();
+    try {
+      const line = JSON.stringify({ display: 'Fix bug', timestamp: 1700000000, project: '/Users/a/Code/proj', sessionId: 's1' });
+      fs.writeFileSync(path.join(tmp, 'history.jsonl'), line + '\n');
+      const h = getHistory(tmp);
+      assert.equal(h.length, 1);
+      assert.equal(h[0].msg, 'Fix bug');
+      assert.equal(h[0].ts, 1700000000);
+      assert.equal(h[0].project, 'Code/proj');
+      assert.equal(h[0].sid, 's1');
+    } finally { rimraf(tmp); }
+  });
+
+  test('skips malformed JSON lines without crashing', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'history.jsonl'), 'not json\n{"display":"ok","timestamp":1}\n');
+      const h = getHistory(tmp);
+      assert.equal(h.length, 1);
+      assert.equal(h[0].msg, 'ok');
+    } finally { rimraf(tmp); }
+  });
+
+  test('truncates display to 120 chars', () => {
+    const tmp = makeTmpDir();
+    try {
+      const long = 'x'.repeat(200);
+      fs.writeFileSync(path.join(tmp, 'history.jsonl'), JSON.stringify({ display: long, timestamp: 1 }) + '\n');
+      assert.equal(getHistory(tmp)[0].msg.length, 120);
+    } finally { rimraf(tmp); }
+  });
+
+  test('defaults ts to 0 and sid to empty when missing', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'history.jsonl'), JSON.stringify({ display: 'hi' }) + '\n');
+      const h = getHistory(tmp)[0];
+      assert.equal(h.ts, 0);
+      assert.equal(h.sid, '');
+    } finally { rimraf(tmp); }
+  });
+
+  test('handles empty history file', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'history.jsonl'), '');
+      assert.deepEqual(getHistory(tmp), []);
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── getClaudeMdFiles ──────────────────────────────────────────────────────────
+
+describe('getClaudeMdFiles', () => {
+  test('returns empty when no CLAUDE.md files exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getClaudeMdFiles(tmp), []); } finally { rimraf(tmp); }
+  });
+
+  test('reads global CLAUDE.md', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'CLAUDE.md'), '# Global rules\n\nBe helpful.');
+      const files = getClaudeMdFiles(tmp);
+      assert.equal(files.length, 1);
+      assert.equal(files[0].scope, 'GLOBAL');
+      assert.equal(files[0].project, '~/.claude/');
+      assert.ok(files[0].body.includes('Be helpful.'));
+      assert.equal(files[0].size, files[0].body.length);
+    } finally { rimraf(tmp); }
+  });
+
+  test('reads project-level CLAUDE.md files', () => {
+    const tmp = makeTmpDir();
+    try {
+      const projDir = path.join(tmp, 'projects', '-Users-andre-myproject');
+      fs.mkdirSync(projDir, { recursive: true });
+      fs.writeFileSync(path.join(projDir, 'CLAUDE.md'), '# Project rules');
+      const files = getClaudeMdFiles(tmp);
+      assert.equal(files.length, 1);
+      assert.equal(files[0].scope, 'PROJECT');
+      assert.ok(files[0].project.includes('/'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('reads both global and project CLAUDE.md', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.writeFileSync(path.join(tmp, 'CLAUDE.md'), '# Global');
+      const projDir = path.join(tmp, 'projects', '-Users-andre-proj');
+      fs.mkdirSync(projDir, { recursive: true });
+      fs.writeFileSync(path.join(projDir, 'CLAUDE.md'), '# Project');
+      assert.equal(getClaudeMdFiles(tmp).length, 2);
+    } finally { rimraf(tmp); }
+  });
+
+  test('skips project dirs with no CLAUDE.md', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(tmp, 'projects', 'no-claude'), { recursive: true });
+      assert.deepEqual(getClaudeMdFiles(tmp), []);
+    } finally { rimraf(tmp); }
+  });
+
+  test('skips unreadable CLAUDE.md without crashing', () => {
+    const tmp = makeTmpDir();
+    try {
+      const f = path.join(tmp, 'CLAUDE.md');
+      fs.writeFileSync(f, '# content');
+      fs.chmodSync(f, 0o000);
+      assert.doesNotThrow(() => getClaudeMdFiles(tmp));
+      assert.deepEqual(getClaudeMdFiles(tmp), []);
+    } finally { rimraf(tmp); }
   });
 });
