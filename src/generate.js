@@ -253,8 +253,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 .sb-foot{
   background:var(--orange);border-radius:0 48px 0 0;
-  padding:10px 20px;font-size:0.6rem;color:rgba(0,0,0,0.4);
-  letter-spacing:0.08em;margin-top:auto;
+  padding:14px 20px;font-size:0.78rem;color:rgba(0,0,0,0.5);
+  letter-spacing:0.08em;margin-top:auto;font-weight:600;
 }
 
 /* ═══ TOP BAR ═══ */
