@@ -1195,8 +1195,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>`).join('')}
       </div>
 
-      <div class="sec" id="s-viz">
-        <canvas id="viz-canvas" style="width:100%;height:100%;display:block;background:#030306;border-radius:12px"></canvas>
+      <div class="sec" id="s-viz" style="position:relative">
+        <div id="enterprise-3d" style="width:100%;height:55%;min-height:300px;background:#020204"></div>
+        <canvas id="viz-canvas" style="width:100%;height:45%;display:block;background:#030306"></canvas>
       </div>
 
       <div class="sec" id="s-comms">
@@ -2269,6 +2270,7 @@ function sendClaude(text) {
     function pump() {
       return reader.read().then(function(result) {
         if (result.done) {
+          _chatInProgress = false;
           btn.disabled = false;
           btn.textContent = 'SEND';
           beepReceive();
@@ -2315,6 +2317,7 @@ function sendClaude(text) {
 
     return pump();
   }).catch(function(e) {
+    _chatInProgress = false;
     crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
     addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
@@ -3003,8 +3006,10 @@ function sendGlobal() {
   var text = input.value.trim();
   if (!text) return;
   if (_chatInProgress) return;
+  _chatInProgress = true;
 
   if (!window.HUD_LIVE) {
+    _chatInProgress = false;
     toast('COMMS OFFLINE. Run: node src/server.js');
     return;
   }
@@ -3014,8 +3019,6 @@ function sendGlobal() {
     sendClaude(text);
     return;
   }
-
-  _chatInProgress = true;
   beepSend();
   input.value = '';
 

@@ -209,32 +209,37 @@ const server = http.createServer(async (req, res) => {
           stdio: ['pipe', 'pipe', 'pipe'],
         });
 
-        let fullOutput = '';
+        let lastAssistantText = '';
 
         proc.stdout.on('data', (data) => {
           const text = data.toString();
-          // Parse stream-json lines
           const lines = text.split('\n').filter(l => l.trim());
           for (const line of lines) {
             try {
               const evt = JSON.parse(line);
               if (evt.type === 'assistant' && evt.message) {
-                // Extract text content from the message
+                // assistant events contain cumulative snapshots, not deltas
+                // Extract full text and send only the NEW portion
                 const content = evt.message.content || [];
+                let currentText = '';
                 for (const block of content) {
                   if (block.type === 'text') {
-                    fullOutput += block.text;
-                    res.write('data: ' + JSON.stringify({ type: 'text', text: block.text }) + '\n\n');
+                    currentText += block.text;
                   } else if (block.type === 'tool_use') {
                     res.write('data: ' + JSON.stringify({ type: 'tool', name: block.name, input: block.input }) + '\n\n');
                   }
                 }
+                // Only send the delta (new text since last event)
+                if (currentText.length > lastAssistantText.length) {
+                  const delta = currentText.slice(lastAssistantText.length);
+                  lastAssistantText = currentText;
+                  res.write('data: ' + JSON.stringify({ type: 'text', text: delta }) + '\n\n');
+                }
               } else if (evt.type === 'result') {
-                // Final result - skip text since it duplicates assistant content
-                // Only signal completion
+                // result contains the same text as assistant - skip to avoid duplication
               }
             } catch {
-              // Not JSON, skip - only process structured stream-json output
+              // Not JSON, skip
             }
           }
         });
