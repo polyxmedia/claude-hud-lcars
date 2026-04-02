@@ -48,6 +48,60 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Open file in default editor
+  if (req.method === 'POST' && req.url === '/api/open') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { path: filePath } = JSON.parse(body);
+        // Security: only allow opening files under ~/.claude/
+        const claudeDir = path.join(os.homedir(), '.claude');
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(claudeDir)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Can only open files under ~/.claude/' }));
+          return;
+        }
+        const { execSync } = await import('child_process');
+        // Use 'open' on macOS, 'xdg-open' on Linux
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+        execSync(cmd + ' ' + JSON.stringify(resolved));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Save file (in-browser editing)
+  if (req.method === 'POST' && req.url === '/api/save') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { path: filePath, content } = JSON.parse(body);
+        const claudeDir = path.join(os.homedir(), '.claude');
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(claudeDir)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Can only save files under ~/.claude/' }));
+          return;
+        }
+        fs.writeFileSync(resolved, content, 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Chat API proxy with streaming
   if (req.method === 'POST' && req.url === '/api/chat') {
     if (!API_KEY) {

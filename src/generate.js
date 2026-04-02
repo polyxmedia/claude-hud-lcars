@@ -181,6 +181,7 @@ return `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CLAUDE-HUD // LCARS</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23000'/><rect x='2' y='2' width='10' height='28' rx='5' fill='%23FF9900'/><rect x='14' y='2' width='16' height='8' rx='0' ry='0' fill='%23FF9900'/><rect x='14' y='12' width='16' height='4' fill='%239999FF'/><rect x='14' y='18' width='8' height='4' fill='%23CC99CC'/><rect x='24' y='18' width='6' height='4' fill='%23FFCC99'/><rect x='14' y='24' width='16' height='6' rx='0' fill='%239999FF'/></svg>"  type="image/svg+xml">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -400,6 +401,71 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .comms-toolbar label{font-size:0.7rem;color:var(--dim);letter-spacing:0.05em;display:flex;align-items:center;gap:6px;cursor:pointer}
 .comms-toolbar input[type=checkbox]{accent-color:var(--orange)}
 
+/* ═══ GLOBAL COMPUTER BAR ═══ */
+.computer-bar{
+  position:fixed;bottom:0;left:240px;right:0;z-index:50;
+  display:flex;gap:0;background:var(--bg);border-top:3px solid var(--orange);
+}
+.computer-bar-label{
+  background:var(--orange);color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.85rem;font-weight:600;
+  padding:0 16px;display:flex;align-items:center;letter-spacing:0.1em;
+  text-transform:uppercase;white-space:nowrap;
+}
+.computer-bar-input{
+  flex:1;display:flex;
+}
+.computer-bar-input textarea{
+  flex:1;background:#060608;border:none;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.88rem;
+  padding:10px 16px;resize:none;height:42px;outline:none;
+}
+.computer-bar-input textarea::placeholder{color:var(--faint)}
+.computer-bar-input textarea:focus{background:#0a0a0c}
+.computer-bar-send{
+  background:var(--orange);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.85rem;font-weight:600;
+  padding:0 20px;cursor:pointer;letter-spacing:0.1em;text-transform:uppercase;
+  transition:filter 0.12s;
+}
+.computer-bar-send:hover{filter:brightness(1.3)}
+.computer-bar-send:disabled{opacity:0.4;cursor:default;filter:none}
+.computer-bar-toggles{
+  display:flex;align-items:center;gap:10px;padding:0 12px;background:#060608;
+}
+.computer-bar-toggles label{font-size:0.6rem;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.computer-bar-toggles input{accent-color:var(--orange)}
+
+/* Computer response overlay */
+.computer-response{
+  position:fixed;bottom:45px;left:240px;right:0;
+  max-height:40vh;overflow-y:auto;
+  background:#08080aee;border-top:2px solid var(--orange);
+  padding:16px 20px;z-index:49;
+  display:none;font-size:0.88rem;line-height:1.7;color:var(--text);
+}
+.computer-response.visible{display:block}
+.computer-response .cr-close{
+  position:sticky;top:0;float:right;
+  background:var(--orange);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;
+  padding:3px 10px;cursor:pointer;letter-spacing:0.08em;
+  border-radius:10px;margin-left:8px;
+}
+.computer-response h1,.computer-response h2,.computer-response h3{font-family:'Antonio',sans-serif;text-transform:uppercase;color:var(--peach);margin:16px 0 8px}
+.computer-response code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px}
+.computer-response pre{background:#000;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan)}
+.computer-response pre code{background:none;color:inherit;padding:0}
+.computer-response strong{color:#eee}
+
+/* Adjust main content to not be hidden by the bar */
+.mn{padding-bottom:48px}
+
+@media(max-width:900px){
+  .computer-bar{left:0}
+  .computer-response{left:0}
+}
+
 /* ═══ BOTTOM BAR ═══ */
 .bb{grid-column:2;display:flex;gap:4px}
 .bb-elbow{width:72px;background:var(--lavender);border-radius:48px 0 0 0;flex-shrink:0}
@@ -520,15 +586,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       <div class="sec" id="s-comms">
         <div class="comms">
           <div class="comms-log" id="comms-log">
-            <div class="comms-msg sys" id="comms-status">COMMS CHANNEL READY</div>
-          </div>
-          <div class="comms-input">
-            <textarea id="comms-in" placeholder="Enter message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
-            <button class="comms-send" id="comms-send" onclick="sendMsg()">SEND</button>
-          </div>
-          <div class="comms-toolbar">
-            <label><input type="checkbox" id="voice-toggle"> VOICE OUTPUT</label>
-            <label><input type="checkbox" id="sound-toggle" checked> LCARS SOUNDS</label>
+            <div class="comms-msg sys">COMMS CHANNEL // USE THE COMPUTER BAR BELOW TO COMMUNICATE</div>
+            <div class="comms-msg sys">ALL CONVERSATIONS ARE DISPLAYED HERE</div>
           </div>
         </div>
       </div>
@@ -555,6 +614,24 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 </div>
+
+<div class="computer-response" id="cr">
+  <button class="cr-close" onclick="closeCR()">DISMISS</button>
+  <div id="cr-body"></div>
+</div>
+
+<div class="computer-bar">
+  <div class="computer-bar-label">COMPUTER</div>
+  <div class="computer-bar-input">
+    <textarea id="cb-in" placeholder="Ask the computer anything..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobal()}"></textarea>
+  </div>
+  <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
+  <div class="computer-bar-toggles">
+    <label><input type="checkbox" id="voice-toggle"> VOICE</label>
+    <label><input type="checkbox" id="sound-toggle" checked> SFX</label>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -610,13 +687,27 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')close_()});
 function doAction(btn){
   var cmd=btn.getAttribute('data-cmd');
   var icon=btn.getAttribute('data-icon');
-  if(icon==='RUN'||icon==='EDIT'){
-    // Copy as a command to run
+  beepAction();
+
+  if(icon==='EDIT' && window.HUD_LIVE){
+    // Extract file path from "open /path/to/file"
+    var filePath = cmd.replace(/^open\\s+/, '');
+    fetch('/api/open', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: filePath}),
+    }).then(function(r){ return r.json() }).then(function(d){
+      if(d.ok) toast('Opened: ' + filePath.split('/').pop());
+      else toast('Error: ' + d.error);
+    }).catch(function(e){ toast('Error: ' + e.message); });
+    return;
+  }
+
+  if(icon==='RUN'){
     navigator.clipboard.writeText(cmd).then(function(){
-      toast('Copied: '+cmd.slice(0,60));
+      toast('Copied: '+cmd);
     });
   } else if(icon==='DEL'){
-    // Confirm before copying delete command
     if(confirm('Copy delete command to clipboard?\\n'+cmd)){
       navigator.clipboard.writeText(cmd).then(function(){
         toast('Copied delete command');
@@ -800,11 +891,12 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = function(){ speechSynthesis.getVoices(); };
 }
 
-// ═══ CHAT / COMMS ═══
+// ═══ GLOBAL COMPUTER CHAT ═══
 var chatHistory = [];
 
 function addMsg(role, text) {
   var log = document.getElementById('comms-log');
+  if (!log) return null;
   var div = document.createElement('div');
   div.className = 'comms-msg ' + role;
   if (role === 'ai') {
@@ -817,26 +909,37 @@ function addMsg(role, text) {
   return div;
 }
 
-function sendMsg() {
-  var input = document.getElementById('comms-in');
+function closeCR() {
+  document.getElementById('cr').classList.remove('visible');
+}
+
+function sendGlobal() {
+  var input = document.getElementById('cb-in');
   var text = input.value.trim();
   if (!text) return;
 
   if (!window.HUD_LIVE) {
-    addMsg('err', 'COMMS OFFLINE. Run with: node src/server.js');
+    toast('COMMS OFFLINE. Run: node src/server.js');
     return;
   }
 
   beepSend();
   input.value = '';
+
+  // Show in comms log
   addMsg('user', text);
   chatHistory.push({ role: 'user', content: text });
 
-  var btn = document.getElementById('comms-send');
+  // Show response overlay
+  var cr = document.getElementById('cr');
+  var crBody = document.getElementById('cr-body');
+  crBody.innerHTML = '<span style="color:var(--dim)">Processing...</span>';
+  cr.classList.add('visible');
+
+  var btn = document.getElementById('cb-send');
   btn.disabled = true;
   btn.textContent = '...';
 
-  var aiDiv = addMsg('ai', '');
   var fullText = '';
 
   fetch('/api/chat', {
@@ -855,12 +958,12 @@ function sendMsg() {
     function pump() {
       return reader.read().then(function(result) {
         if (result.done) {
-          // Done
           chatHistory.push({ role: 'assistant', content: fullText });
           btn.disabled = false;
           btn.textContent = 'SEND';
           beepReceive();
           speak(fullText);
+          addMsg('ai', fullText);
           return;
         }
         buffer += decoder.decode(result.value, { stream: true });
@@ -875,9 +978,8 @@ function sendMsg() {
               var evt = JSON.parse(data);
               if (evt.type === 'content_block_delta' && evt.delta && evt.delta.text) {
                 fullText += evt.delta.text;
-                aiDiv.innerHTML = md(fullText);
-                var log = document.getElementById('comms-log');
-                log.scrollTop = log.scrollHeight;
+                crBody.innerHTML = md(fullText);
+                cr.scrollTop = cr.scrollHeight;
               }
             } catch(e) {}
           }
@@ -888,6 +990,7 @@ function sendMsg() {
 
     return pump();
   }).catch(function(e) {
+    crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
     addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'SEND';
