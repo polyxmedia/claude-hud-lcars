@@ -1426,7 +1426,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-plugins">
-        <div class="sec-h">Plugin Manifest</div>
+        <div class="sec-h"><span>Plugin Manifest</span><button class="sec-h-new" onclick="toggleCreate('plugin')">+ NEW</button></div>
+        <div class="create-form" id="cf-plugin">
+          <h3>Register Plugin</h3>
+          <div class="cf-row"><label>Plugin ID</label><input id="cf-plugin-id" placeholder="@scope/plugin-name or plugin-name"></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createPlugin()">ENABLE</button><button class="cf-cancel" onclick="toggleCreate('plugin')">CANCEL</button></div>
+        </div>
         ${plugins.length===0?'<div class="emp">No plugins loaded</div>':plugins.map(p=>`
         <div class="r r2" onclick="open_('p:${esc(p.id)}')" data-k="p:${esc(p.id)}">
           <span class="r-id">${esc(p.id)}</span>
@@ -3297,6 +3302,25 @@ function createEnv() {
       toast('ENV SET: ' + key);
       beepAction();
       toggleCreate('env');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
+
+function createPlugin() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var id = document.getElementById('cf-plugin-id').value.trim();
+  if (!id) { toast('Plugin ID required'); return; }
+
+  fetch('/api/settings-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-plugin', id: id }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('PLUGIN ENABLED: ' + id);
+      beepAction();
+      toggleCreate('plugin');
       setTimeout(function() { location.reload(); }, 500);
     } else { toast('ERROR: ' + d.error); }
   }).catch(function(e) { toast('ERROR: ' + e.message); });
