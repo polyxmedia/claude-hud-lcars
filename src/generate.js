@@ -1834,9 +1834,10 @@ function startMic() {
       sendGlobal();
     } else {
       // No speech detected but voice mode still on, restart after a short pause
-      if (isToggleOn('voice-toggle') && !computerSpeaking) {
+      // Don't restart if a chat is in progress (waiting for response)
+      if (isToggleOn('voice-toggle') && !computerSpeaking && !_chatInProgress) {
         setTimeout(function() {
-          if (isToggleOn('voice-toggle') && !micActive && !computerSpeaking) {
+          if (isToggleOn('voice-toggle') && !micActive && !computerSpeaking && !_chatInProgress) {
             startListening();
           }
         }, 500);
@@ -2898,10 +2899,12 @@ function closeCR() {
   var cr = document.getElementById('cr');
   cr.classList.remove('visible');
   cr.classList.remove('minimised');
+  stopSpeaking();
 }
 
 function minimiseCR() {
   document.getElementById('cr').classList.add('minimised');
+  stopSpeaking();
   beepNav();
 }
 
@@ -2925,10 +2928,12 @@ function showLogButton() {
   if (btn) btn.style.display = '';
 }
 
+var _chatInProgress = false;
 function sendGlobal() {
   var input = document.getElementById('cb-in');
   var text = input.value.trim();
   if (!text) return;
+  if (_chatInProgress) return;
 
   if (!window.HUD_LIVE) {
     toast('COMMS OFFLINE. Run: node src/server.js');
@@ -2941,6 +2946,7 @@ function sendGlobal() {
     return;
   }
 
+  _chatInProgress = true;
   beepSend();
   input.value = '';
 
@@ -2968,6 +2974,7 @@ function sendGlobal() {
   var fullText = '';
   var streamStarted = false;
   var activeBlockIdx = -1;
+  var seenEvents = {};
 
   fetch('/api/chat', {
     method: 'POST',
@@ -2986,6 +2993,7 @@ function sendGlobal() {
       return reader.read().then(function(result) {
         if (result.done) {
           clearTimeout(safetyTimer);
+          _chatInProgress = false;
           chatHistory.push({ role: 'assistant', content: fullText });
           btn.disabled = false;
           btn.textContent = 'SEND';
@@ -3012,7 +3020,10 @@ function sendGlobal() {
                 continue;
               }
               if (evt.type === 'content_block_stop') continue;
-              if (evt.type === 'content_block_delta' && evt.index === activeBlockIdx && evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
+              if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
+                // Deduplicate: skip if we've seen this exact data line before
+                if (seenEvents[data]) continue;
+                seenEvents[data] = true;
                 fullText += evt.delta.text;
                 if (!streamStarted) {
                   streamStarted = true;
@@ -3034,6 +3045,7 @@ function sendGlobal() {
     return pump();
   }).catch(function(e) {
     clearTimeout(safetyTimer);
+    _chatInProgress = false;
     crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
     addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
