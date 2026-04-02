@@ -1029,6 +1029,12 @@ function startMic() {
   showWaveform('listening');
   beepAction();
 
+  // Show live transcription overlay
+  var cr = document.getElementById('cr');
+  var crBody = document.getElementById('cr-body');
+  crBody.innerHTML = '<span style="color:var(--salmon);font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.12em;text-transform:uppercase">VOICE INPUT ACTIVE</span><p id="live-transcript" style="color:var(--text);margin-top:10px;font-size:1rem;line-height:1.6;min-height:2em"></p>';
+  cr.classList.add('visible');
+
   var input = document.getElementById('cb-in');
   var finalTranscript = '';
 
@@ -1042,6 +1048,11 @@ function startMic() {
       }
     }
     input.value = finalTranscript + interim;
+    // Update live transcription display
+    var liveEl = document.getElementById('live-transcript');
+    if (liveEl) {
+      liveEl.innerHTML = esc(finalTranscript) + '<span style="color:var(--dim)">' + esc(interim) + '</span>';
+    }
   };
 
   recognition.onend = function() {
@@ -1050,12 +1061,15 @@ function startMic() {
     if (finalTranscript.trim()) {
       beepSend();
       sendGlobal();
+    } else {
+      cr.classList.remove('visible');
     }
   };
 
   recognition.onerror = function(e) {
     micActive = false;
     hideWaveform();
+    cr.classList.remove('visible');
     if (e.error !== 'no-speech') {
       toast('Mic error: ' + e.error);
     }
