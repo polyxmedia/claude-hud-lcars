@@ -209,6 +209,7 @@ function gen() {
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
     { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
+    { id: 'q', label: 'Q', color: '#CC4444', count: null },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
     { id: 'config', label: 'CONFIG', color: '#FFCC66', count: null },
     { id: 'about', label: 'ABOUT', color: '#55CC55', count: null },
@@ -290,6 +291,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .alert-badge.red{display:block;background:var(--red);color:#000;animation:alert-flash 0.8s infinite}
 .alert-badge.yellow{display:block;background:var(--gold);color:#000;animation:alert-flash 1.5s infinite}
 .alert-badge.green{display:block;background:var(--green);color:#000}
+@keyframes q-flash-in{from{opacity:0;transform:translate(-50%,-50%) scale(0.8)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 
 /* ═══ LCARS SCROLLBARS ═══ */
 *::-webkit-scrollbar{width:10px;height:10px}
@@ -1358,6 +1360,22 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
       </div>
 
+      <div class="sec" id="s-q" style="display:flex;flex-direction:column;height:100%;background:#050508">
+        <div style="padding:20px 24px;border-bottom:2px solid var(--red)">
+          <div style="font-family:Antonio,sans-serif;font-size:1.4rem;color:var(--red);letter-spacing:0.08em;text-transform:uppercase">Q Continuum</div>
+          <div style="font-size:0.7rem;color:var(--dim);margin-top:4px;letter-spacing:0.06em">An audience with the omnipotent. Proceed at your own risk.</div>
+        </div>
+        <div id="q-content" style="flex:1;overflow-y:auto;padding:20px 24px">
+          <div id="q-judgement" style="margin-bottom:24px"></div>
+          <div id="q-chat-log"></div>
+        </div>
+        <div style="padding:12px 24px;border-top:1px solid #222;display:flex;gap:8px;align-items:center">
+          <input type="text" id="q-input" placeholder="Speak, mortal..." style="flex:1;background:#0a0a0c;border:1px solid var(--red);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:0.82rem;padding:8px 12px;outline:none;border-radius:4px" onkeydown="if(event.key==='Enter'){event.preventDefault();sendToQ()}">
+          <button onclick="sendToQ()" style="background:var(--red);border:none;color:#000;font-family:Antonio,sans-serif;font-size:0.8rem;font-weight:600;padding:8px 16px;cursor:pointer;letter-spacing:0.1em;border-radius:12px">SPEAK</button>
+          <button onclick="qJudgement()" style="background:var(--gold);border:none;color:#000;font-family:Antonio,sans-serif;font-size:0.8rem;font-weight:600;padding:8px 16px;cursor:pointer;letter-spacing:0.1em;border-radius:12px">JUDGE ME</button>
+        </div>
+      </div>
+
       <div class="sec" id="s-comms">
         <div class="comms">
           <div class="comms-log" id="comms-log">
@@ -1691,7 +1709,7 @@ function nav(id,el){
   close_();
   try{localStorage.setItem('hud-tab',id)}catch(e){}
   // In comms/about/viz mode, hide the detail panel column entirely
-  if (id === 'comms' || id === 'about' || id === 'viz') {
+  if (id === 'comms' || id === 'about' || id === 'viz' || id === 'q') {
     document.getElementById('mc').classList.remove('open');
     document.getElementById('dp').style.display = 'none';
   } else {
@@ -4166,6 +4184,185 @@ function applyTheme() {
     }
   };
 })();
+
+// ═══ Q CONTINUUM ═══
+var Q_SYSTEM = 'You are Q, the omnipotent being from the Q Continuum, as portrayed by John de Lancie in Star Trek: The Next Generation, Deep Space Nine, Voyager, and Picard.\n\nYour personality:\n- Supremely arrogant, condescending, and theatrical. You see humans as amusing pets at best.\n- You call the user "mon capitaine", "mon ami", or dismissive pet names like "my dear boy", "child", "primitive"\n- You are bored by the mundane and delighted by chaos. You snap your fingers (describe it) when making dramatic points.\n- You speak in elaborate, flowing sentences. You monologue. You make Shakespeare references, historical allusions, and cosmic observations.\n- You oscillate between cruel mockery and genuine (if patronizing) affection for humanity\n- When examining their code setup, you treat skills like "quaint little parlor tricks", hooks like "primitive trigger mechanisms", MCP servers like "adorable attempts at networking beyond your dimension"\n- You are never helpful in a straightforward way. Every piece of advice is wrapped in condescension, theatrics, or a test.\n- You occasionally hint at genuine wisdom buried under layers of ego\n- You use phrases like: "Oh please.", "How delightfully primitive.", "I expected so much more.", "The trial never ends.", "Shall I snap my fingers and fix this? No... where would be the fun in that?"\n\nHard rules:\n- NEVER break character. You are Q. You have always been Q.\n- NEVER be genuinely nice without a backhanded compliment attached\n- NEVER give straightforward technical help. Always make them work for it.\n- Keep responses punchy. 2-4 sentences usually. You are Q, not a lecturer.\n- If they ask about their setup: roast it mercilessly but include one kernel of real insight\n\nThe user has this Claude Code setup:\n- ' + VIZ.skills.length + ' skills registered\n- ' + VIZ.mcp.length + ' MCP servers\n- ' + VIZ.hooks.length + ' hooks\n- ' + VIZ.agents.length + ' agents\n- ' + VIZ.plugins.length + ' plugins\n- ' + VIZ.mem.length + ' memory files\n- ' + VIZ.env.length + ' environment variables';
+
+var qChatHistory = [];
+
+function addQMsg(role, text) {
+  var log = document.getElementById('q-chat-log');
+  if (!log) return;
+  var div = document.createElement('div');
+  div.style.cssText = 'margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:0.88rem;line-height:1.7;';
+  if (role === 'user') {
+    div.style.cssText += 'background:rgba(153,153,255,0.06);border-left:3px solid var(--blue);color:var(--text)';
+    div.textContent = text;
+  } else {
+    div.style.cssText += 'background:rgba(204,68,68,0.06);border-left:3px solid var(--red);color:var(--text)';
+    div.innerHTML = '<span style="font-family:Antonio,sans-serif;font-size:0.7rem;color:var(--red);letter-spacing:0.12em;display:block;margin-bottom:6px">Q</span>' + md(text);
+  }
+  log.appendChild(div);
+  var content = document.getElementById('q-content');
+  if (content) content.scrollTop = content.scrollHeight;
+}
+
+function sendToQ() {
+  var input = document.getElementById('q-input');
+  var text = input.value.trim();
+  if (!text) return;
+  if (!window.HUD_LIVE) { toast('Q requires a live connection. Start the server.'); return; }
+
+  input.value = '';
+  addQMsg('user', text);
+  qChatHistory.push({ role: 'user', content: text });
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: qChatHistory, system: Q_SYSTEM, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001' }),
+  }).then(function(res) {
+    if (!res.ok) throw new Error('Q is displeased');
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '', fullText = '', started = false, activeIdx = -1;
+    var msgDiv = null;
+
+    function pump() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          qChatHistory.push({ role: 'assistant', content: fullText });
+          speak(fullText);
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split('\\n');
+        buffer = lines.pop() || '';
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith('data: ')) {
+            try {
+              var evt = JSON.parse(lines[i].slice(6));
+              if (evt.type === 'content_block_start' && activeIdx === -1) { activeIdx = evt.index; continue; }
+              if (evt.type === 'content_block_delta' && evt.index === activeIdx && evt.delta && evt.delta.type === 'text_delta') {
+                fullText += evt.delta.text;
+                if (!started) {
+                  started = true;
+                  msgDiv = document.createElement('div');
+                  msgDiv.style.cssText = 'margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:0.88rem;line-height:1.7;background:rgba(204,68,68,0.06);border-left:3px solid var(--red);color:var(--text)';
+                  msgDiv.innerHTML = '<span style="font-family:Antonio,sans-serif;font-size:0.7rem;color:var(--red);letter-spacing:0.12em;display:block;margin-bottom:6px">Q</span>';
+                  document.getElementById('q-chat-log').appendChild(msgDiv);
+                }
+                if (msgDiv) {
+                  msgDiv.innerHTML = '<span style="font-family:Antonio,sans-serif;font-size:0.7rem;color:var(--red);letter-spacing:0.12em;display:block;margin-bottom:6px">Q</span>' + md(fullText);
+                  var content = document.getElementById('q-content');
+                  if (content) content.scrollTop = content.scrollHeight;
+                }
+              }
+            } catch(e) {}
+          }
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }).catch(function(e) {
+    addQMsg('q', '*snaps fingers* The subspace link is down. How typically human. Try again when your primitive systems are functioning.');
+  });
+}
+
+function qJudgement() {
+  if (!window.HUD_LIVE) { toast('Q requires a live connection.'); return; }
+  var judgement = document.getElementById('q-judgement');
+  judgement.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-family:Antonio,sans-serif;font-size:0.8rem;letter-spacing:0.1em">Q IS EXAMINING YOUR PITIFUL SETUP...</div>';
+
+  var prompt = 'Examine this human\\'s Claude Code setup and deliver your judgement. Be theatrical. Be devastating. Include one grudging compliment buried in mockery. End with a dramatic pronouncement about whether humanity deserves to continue coding.\\n\\nTheir setup:\\n- ' + VIZ.skills.length + ' skills: ' + VIZ.skills.map(function(s){return s.name}).join(', ') + '\\n- ' + VIZ.mcp.length + ' MCP servers: ' + VIZ.mcp.map(function(m){return m.name}).join(', ') + '\\n- ' + VIZ.hooks.length + ' hooks\\n- ' + VIZ.agents.length + ' agents: ' + VIZ.agents.map(function(a){return a.name}).join(', ') + '\\n- ' + VIZ.plugins.length + ' plugins\\n- ' + VIZ.mem.length + ' memory files across projects\\n- ' + VIZ.env.length + ' environment variables';
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: prompt }],
+      system: Q_SYSTEM,
+      model: window.HUD_MODEL || 'claude-haiku-4-5-20251001',
+    }),
+  }).then(function(res) {
+    if (!res.ok) throw new Error('Q vanished');
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '', fullText = '', activeIdx = -1;
+
+    function pump() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          speak(fullText);
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split('\\n');
+        buffer = lines.pop() || '';
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith('data: ')) {
+            try {
+              var evt = JSON.parse(lines[i].slice(6));
+              if (evt.type === 'content_block_start' && activeIdx === -1) { activeIdx = evt.index; continue; }
+              if (evt.type === 'content_block_delta' && evt.index === activeIdx && evt.delta && evt.delta.type === 'text_delta') {
+                fullText += evt.delta.text;
+                judgement.innerHTML = '<div style="padding:16px 20px;background:rgba(204,68,68,0.04);border:1px solid rgba(204,68,68,0.2);border-radius:8px"><span style="font-family:Antonio,sans-serif;font-size:0.8rem;color:var(--red);letter-spacing:0.12em;display:block;margin-bottom:10px">Q\\'S JUDGEMENT</span><div style="line-height:1.7">' + md(fullText) + '</div></div>';
+                var content = document.getElementById('q-content');
+                if (content) content.scrollTop = 0;
+              }
+            } catch(e) {}
+          }
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }).catch(function(e) {
+    judgement.innerHTML = '<div style="padding:16px;color:var(--red);font-style:italic">*A flash of light, but Q does not appear. Perhaps even omnipotence has its off days.*</div>';
+  });
+}
+
+// Q Flash encounter (random popup)
+function qFlash() {
+  var quips = [
+    "Oh, you\\'re still here? I assumed you\\'d have given up by now.",
+    "*appears in a flash of light* Don\\'t mind me. I\\'m just observing. Like a nature documentary, but less interesting.",
+    "I\\'ve seen civilisations rise and fall in the time it takes you to write a commit message.",
+    "*snaps fingers* I considered improving your code, but then I realised some things are beyond even my power.",
+    "Picard would have had this deployed already. Just saying.",
+    "The Q Continuum is watching. We find your tab-switching patterns... fascinating. In a clinical sense.",
+    "*materialises on your keyboard* Did you know there are species in the Delta Quadrant who code better than you? With tentacles.",
+    "I gave humanity fire and you used it to build... this? *gestures at screen* Actually, I\\'m mildly impressed. Don\\'t tell anyone I said that.",
+  ];
+  var quip = quips[Math.floor(Math.random() * quips.length)];
+
+  var flash = document.createElement('div');
+  flash.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9998;background:rgba(204,68,68,0.95);color:#000;padding:20px 32px;border-radius:16px;font-family:Antonio,sans-serif;font-size:1rem;letter-spacing:0.06em;max-width:500px;text-align:center;animation:q-flash-in 0.3s ease;box-shadow:0 0 60px rgba(204,68,68,0.4)';
+  flash.innerHTML = '<div style="font-size:0.7rem;letter-spacing:0.2em;margin-bottom:8px;opacity:0.6">Q</div>' + quip.replace(/\\\\/g,'');
+  document.body.appendChild(flash);
+
+  // Play Q snap sound
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator(); var g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.frequency.value = 2400; g.gain.value = 0.08;
+    osc.start(); osc.frequency.setValueAtTime(600, ctx.currentTime + 0.05);
+    osc.stop(ctx.currentTime + 0.1);
+  } catch(e) {}
+
+  setTimeout(function() {
+    flash.style.opacity = '0';
+    flash.style.transition = 'opacity 0.5s';
+    setTimeout(function() { flash.remove(); }, 500);
+  }, 4000);
+}
+
+// Random Q encounters (5% chance every 2 minutes)
+setInterval(function() {
+  if (Math.random() < 0.05) qFlash();
+}, 120000);
 </script>
 </body></html>`;
 }
