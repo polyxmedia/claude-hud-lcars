@@ -1,131 +1,132 @@
 # claude-hud-lcars
 
-LCARS-inspired operations dashboard for [Claude Code](https://claude.ai/code). See everything you've built at a glance, drill into any skill, hook, agent, or MCP server, and read the full content like pulling up a file on a PADD.
+Your entire Claude Code setup, rendered as a Star Trek LCARS terminal. Skills, agents, hooks, MCP servers, plugins, memory files, environment variables, all of it visible, searchable, and actionable from one interface. Click anything to read the full content like you're pulling up a file on a PADD.
 
-> Zero config. Zero dependencies. Just run it.
-
-## Quick Start
-
-### Static mode (dashboard only)
+There's also a built-in AI chat that responds as the Federation LCARS computer. With voice output. And sound effects. Because if you're going to build an operations dashboard for an AI coding tool, you might as well commit to the bit.
 
 ```bash
 npx claude-hud-lcars
 ```
 
-Scans your `~/.claude/` directory, generates a dashboard, and opens it in your browser. No server needed.
+That's the whole setup. Zero dependencies. Scans `~/.claude/`, generates a self-contained HTML dashboard, opens it in your browser. Done.
 
-### Live mode (dashboard + chat + file editing)
+## What you're looking at
+
+The dashboard reads everything Claude Code knows about your setup and presents it in an LCARS interface with the authentic TNG color palette, the signature rounded elbows connecting sections, colored navigation bars, and the Antonio typeface standing in for Swiss 911.
+
+Seven sections, each one clickable:
+
+- **Skills** with version, execution context (fork/inline), and the full SKILL.md rendered with syntax highlighting when you click through
+- **MCP Servers** showing every configured server, its command, args, and the complete JSON config on drill-down (env vars auto-redacted, your secrets stay secret)
+- **Hooks** with event type, matcher pattern, hook type, and the full hook definition viewable in the detail panel
+- **Plugins** and their active/inactive status
+- **Agents** with their descriptions and full prompt definitions
+- **Environment** variables you've set in settings.json
+- **Memory** files across all your projects, each one readable in full
+
+Every row is clickable. The detail panel slides open on the right, renders the markdown properly with headers, tables, code blocks, lists, the works. JSON configs get syntax highlighted automatically with color-coded keys, strings, numbers, and booleans. It genuinely looks like you're reading a classified Starfleet briefing.
+
+## The COMPUTER bar
+
+There's a persistent input bar at the bottom of every screen labeled COMPUTER. Type anything, hit Enter. It talks to the Claude API and streams responses in real-time through a response overlay that slides up from the bottom. The conversation also logs to the COMMS section in the sidebar so you can scroll back through it.
+
+The system prompt makes Claude respond as LCARS, the Library Computer Access and Retrieval System. Calm, measured, structured responses using Starfleet terminology. It refers to your development environment as the ship's systems, your skills as installed modules, your MCP servers as the fleet. It's genuinely fun to use.
+
+This requires the live server mode and an API key:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 npx claude-hud-lcars --serve
 ```
 
-Starts a local server at `http://localhost:3200` with:
-- Live dashboard that regenerates on each load
-- **COMMS channel** for chatting with Claude (streams responses, Star Trek computer system prompt)
-- **Voice output** reads responses aloud (toggleable, uses Web Speech API)
-- **LCARS sound effects** on every interaction (synthesized beeps via Web Audio API)
-- **Open files** directly from the dashboard into your editor
-- **Edit files** in-browser with save back to disk
+That starts a local server at `http://localhost:3200`. The dashboard regenerates on every page load so it's always fresh, the chat proxies through to the Anthropic Messages API with streaming, and file operations work for opening and editing your Claude Code configs directly from the browser.
 
-Get your API key from [console.anthropic.com](https://console.anthropic.com/).
-
-#### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | (required for chat) | Your Anthropic API key |
-| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Model for the COMMS channel |
-| `PORT` | `3200` | Server port |
-
-## What It Shows
-
-| Section | What You See |
-|---------|-------------|
-| **Skills** | Every custom skill with version, execution context, full SKILL.md on click |
-| **MCP Servers** | All configured servers with commands, args, full config on click |
-| **Hooks** | Every hook intercept with event, matcher, type, complete definition on click |
-| **Plugins** | Installed plugins and active/inactive status |
-| **Agents** | Custom agent definitions with full prompt on click |
-| **Environment** | All env var overrides from settings.json |
-| **Memory** | Every memory file across all projects with full content on click |
-| **Comms** | Chat with Claude through an LCARS interface (live mode only) |
+Without an API key, the dashboard still works perfectly for browsing your setup. The COMPUTER bar just shows an offline message.
 
 ## Actions
 
-Click any item to open the detail panel, then use the action buttons:
+The detail panel includes action buttons that actually do things:
 
-| Action | What it does |
+| Button | What happens |
 |--------|-------------|
-| **INVOKE** | Copies the `/skill-name` command to clipboard for Claude Code |
-| **OPEN FILE** | Opens the file in your default editor (live mode) or copies the path |
-| **COPY PATH** | Copies the full file path to clipboard |
-| **COPY CONFIG** | Copies the full JSON configuration |
+| **INVOKE** | Copies `/skill-name` to your clipboard, paste it straight into Claude Code |
+| **OPEN FILE** | Opens the file in your default editor (live mode), or copies the path |
+| **COPY PATH** | Copies the full file path |
+| **COPY CONFIG** | Copies the complete JSON configuration |
 | **EDIT SETTINGS** | Opens settings.json in your editor |
-| **DELETE** | Copies the delete command (with confirmation) |
+| **DELETE** | Copies the delete command with a confirmation dialog first |
 
-## Voice and Sound
+In static mode these copy to clipboard. In live server mode, OPEN FILE actually opens the file.
 
-- **LCARS Sounds** (on by default) synthesized beeps on navigation, opening details, sending messages. Pure Web Audio API, no sound files.
-- **Voice Output** (off by default) reads Claude's chat responses aloud using the best available system voice. On macOS this picks Samantha which gives a calm, measured computer voice.
+## Voice and sound
 
-Both toggleable from the COMMS toolbar.
+Two toggle buttons in the COMPUTER bar:
 
-## The Interface
+**VOICE** activates Web Speech API output. When Claude responds through the COMPUTER bar, the response gets read aloud. On macOS it picks Samantha by default which, with the pitch nudged up slightly and the rate slowed down, gives a reasonably computer-like delivery. It won't fool anyone into thinking it's Majel Barrett, but it fits the vibe.
 
-Built with an LCARS (Star Trek TNG) aesthetic. The layout uses the signature LCARS elements: rounded elbows connecting sections, colored navigation bars, Antonio font for headers, and the classic orange/peach/blue/lavender palette on pure black.
+**SFX** enables LCARS sound effects on every interaction. Navigation clicks, detail panel opens, sending messages, receiving responses, all get synthesized beeps via the Web Audio API. No sound files, no external assets, just sine wave oscillators tuned to the right frequencies. The nav beep is a quick 1200Hz chirp. Opening a detail panel does a two-tone 800Hz then 1600Hz. Sending a message drops to 600Hz then rises to 900Hz. Subtle, satisfying, authentic.
 
-- **Left sidebar** with colored navigation buttons
-- **Click any row** to open the detail PADD with full rendered content
-- **ESC** to close the detail panel
-- **Code blocks** with syntax highlighting and language badges
-- **Markdown** fully rendered with headers, tables, lists, blockquotes
+Both are toggleable at any time. SFX is on by default, voice is off.
 
-## How It Works
+## Configuration
 
-The dashboard is a single self-contained HTML file generated from your `~/.claude/` directory.
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | (none) | Required for COMPUTER bar chat. Get one from [console.anthropic.com](https://console.anthropic.com/) |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Which model the COMPUTER bar talks to |
+| `PORT` | `3200` | Server port for live mode |
 
-It reads:
-- `~/.claude/skills/*/SKILL.md` - skill definitions
-- `~/.claude/agents/*.md` - agent definitions  
-- `~/.claude/settings.json` - settings, hooks, MCP servers, plugins, env vars
-- `~/.claude/projects/*/memory/*.md` - memory files across all projects
+## How it actually works
 
-Secrets in MCP server env vars are automatically redacted.
+The whole thing is a Node.js script that walks your `~/.claude/` directory tree:
 
-In live mode, the server also provides:
-- `POST /api/chat` - proxies to the Anthropic Messages API with streaming
-- `POST /api/open` - opens files in your default editor (restricted to `~/.claude/`)
-- `POST /api/save` - saves edited files back to disk (restricted to `~/.claude/`)
+```
+~/.claude/skills/*/SKILL.md        → skill definitions with frontmatter
+~/.claude/agents/*.md              → agent definitions
+~/.claude/settings.json            → hooks, MCP servers, plugins, env vars
+~/.claude/projects/*/memory/*.md   → memory files across all projects
+```
 
-## Install Globally (Optional)
+It reads every file, parses the YAML frontmatter, extracts the markdown body, and generates a single self-contained HTML file with all the data embedded as a JSON blob. The LCARS interface, the CSS, the JavaScript, the syntax highlighter, the markdown renderer, the chat client, the voice synthesis, the sound effects, all inline in one HTML file. No build step, no bundler, no framework.
+
+In live mode, the server adds three API endpoints:
+- `POST /api/chat` proxies to the Anthropic Messages API with SSE streaming
+- `POST /api/open` opens files in your default editor
+- `POST /api/save` saves edited files back to disk
+
+All file operations are sandboxed to `~/.claude/` only. The server validates every path and rejects anything outside that directory.
+
+## Security
+
+- MCP server environment variables (API keys, database URLs, tokens) are automatically replaced with `{redacted}` in the dashboard
+- File open and save operations are restricted to `~/.claude/` with path traversal prevention
+- The API key is only used server-side, never embedded in the HTML
+- The static dashboard makes zero external requests (aside from Google Fonts for the LCARS typeface)
+
+## Requirements
+
+- Node.js 18 or later
+- Claude Code installed (`~/.claude/` directory exists)
+- An Anthropic API key if you want the chat to work (dashboard works without it)
+- macOS or Linux
+
+## Install globally
 
 ```bash
 npm install -g claude-hud-lcars
 ```
 
-Then just run `claude-hud-lcars` or `claude-hud-lcars --serve` anywhere.
+Then run `claude-hud-lcars` for static mode or `claude-hud-lcars --serve` for live mode, from anywhere.
 
-## Requirements
+## What if I have nothing installed
 
-- Node.js 18+
-- Claude Code installed (`~/.claude/` directory exists)
-- Anthropic API key (for chat only, dashboard works without it)
+It still works. Empty sections render cleanly with placeholder messages. It's actually a decent way to see what Claude Code can do, you look at the empty sections and think "I should probably set up some hooks" or "I didn't know I could have custom agents."
 
-## FAQ
+## The aesthetic
 
-**Does it modify anything?**
-In static mode, no. Read-only. In live mode, the OPEN FILE and EDIT actions can modify files under `~/.claude/` only.
+The LCARS design uses the authentic TNG color palette: `#FF9900` orange, `#FFCC99` peach, `#9999FF` periwinkle, `#CC99CC` lavender, `#CC9966` tan, `#FF9966` salmon, `#66CCCC` cyan. Pure black background. The signature rounded elbows connect the sidebar to the top and bottom bars. Navigation buttons have the characteristic pill shape with rounded right edges. Section headers use the Antonio typeface which is the closest web font to the actual Swiss 911 Ultra Compressed used in the show.
 
-**Does it send data anywhere?**
-Only when using the COMMS chat, which sends messages to the Anthropic API through the local server. The dashboard itself makes no external requests (except Google Fonts for the LCARS typeface).
-
-**What if I have no customizations?**
-It still works. Empty sections show cleanly. It's a good way to see what's possible with Claude Code.
-
-**Can I change the model for chat?**
-Set `CLAUDE_MODEL=claude-opus-4-6` (or any model) before starting the server.
+The detail panel, the response overlay, and the code blocks all render on the black void with the blue left-border accent. Tables get orange header styling. Inline code gets the orange highlight. It's consistent, it's readable, and it looks like something that belongs on the bridge of the Enterprise-D.
 
 ## License
 
@@ -133,6 +134,6 @@ MIT
 
 ## Credits
 
-Built by [Andre Figueira](https://github.com/andrefigueira) using Claude Code.
+Built by [Andre Figueira](https://github.com/andrefigueira) with Claude Code.
 
-LCARS design inspired by Star Trek: The Next Generation. LCARS is a trademark of CBS Studios.
+LCARS design inspired by Star Trek: The Next Generation. LCARS is a trademark of CBS Studios. This project is not affiliated with or endorsed by CBS Studios or Paramount.
