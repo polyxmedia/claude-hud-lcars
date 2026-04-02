@@ -37,21 +37,28 @@ Zero dependencies. Scans `~/.claude/`, generates a self-contained HTML dashboard
 
 The dashboard reads everything Claude Code knows about your setup and presents it in an LCARS interface with the authentic TNG color palette, the signature rounded elbows connecting sections, colored navigation bars, and the Antonio typeface standing in for Swiss 911.
 
-Ten sections, each one clickable:
+Sections, each one clickable:
 
 - **Skills** with version, execution context (fork/inline), and the full SKILL.md rendered with syntax highlighting when you click through
-- **MCP Servers** showing every configured server, its command, args, and the complete JSON config on drill-down (env vars auto-redacted, your secrets stay secret)
+- **MCP Servers** showing every configured server from `settings.json` and project-level `.mcp.json` files. Scans `~/Code`, `~/Projects`, `~/Developer`, `~/src` and more by default. Set `CLAUDE_HUD_DIRS` for custom paths. Command, args, server type, and full JSON config on drill-down (env vars auto-redacted)
 - **Hooks** with event type, matcher pattern, hook type, and the full hook definition viewable in the detail panel
 - **Plugins** and their active/inactive status, clickable for config details
 - **Agents** with their descriptions and full prompt definitions
 - **Environment** variables you've set in settings.json, clickable to copy values
 - **Memory** files across all your projects, each one readable in full
-- **Tactical** an interactive force-directed graph showing your entire setup as a Star Trek sensor display, plus a real 3D Enterprise-D model via Sketchfab
+- **Sessions** your recent Claude Code sessions with stats: total count, today's sessions, projects used, most active project. Click any session to see the full details
+- **CLAUDE.md** every CLAUDE.md file across your setup. Global and per-project. View the full content, open in your editor, or copy the path
+- **Tactical** an interactive force-directed graph showing your entire setup as a Star Trek sensor display. Drag nodes around, hover for detailed info cards, click to navigate. Sub-tabs for the systems map and a 3D Enterprise-D model
 - **Q** talk to Q from the Continuum. He'll roast your setup, call you "mon capitaine", and appear uninvited every few minutes
-- **Comms** scrollable log of all chat messages
+- **Comms** scrollable log of all chat messages with full markdown rendering
 - **Config** model selector (Haiku/Sonnet/Opus), voice engine, ElevenLabs setup, ship name, ship theme, sound effects
+- **About** what this is, who built it, links
 
 Every row is clickable. The detail panel slides open on the right, renders the markdown properly with headers, tables, code blocks, lists, the works. JSON configs get syntax highlighted automatically with color-coded keys, strings, numbers, and booleans. It genuinely looks like you're reading a classified Starfleet briefing.
+
+## Search
+
+Hit `Cmd+K` (or `Ctrl+K`, or `/`) from any screen to open universal search. It searches across everything: skills, hooks, MCP servers, agents, memory files, sessions, CLAUDE.md content, environment variables, plugins. Results are colour-coded by type with match highlighting. Click a result to jump straight to that item in its section. `Escape` to close, `Enter` to open the first result.
 
 ## The COMPUTER bar
 
@@ -139,6 +146,7 @@ Environment:
 | `ANTHROPIC_API_KEY` | (none) | Required for COMPUTER bar chat. Get one from [console.anthropic.com](https://console.anthropic.com/) |
 | `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Which model the COMPUTER bar talks to (also configurable in the CONFIG panel) |
 | `PORT` | `3200` | Server port for live mode |
+| `CLAUDE_HUD_DIRS` | (none) | Extra directories to scan for `.mcp.json` files, colon-separated. e.g. `~/work:~/clients` |
 
 ## How it actually works
 
@@ -148,7 +156,11 @@ The whole thing is a Node.js script that walks your `~/.claude/` directory tree:
 ~/.claude/skills/*/SKILL.md        → skill definitions with frontmatter
 ~/.claude/agents/*.md              → agent definitions
 ~/.claude/settings.json            → hooks, MCP servers, plugins, env vars
+~/.claude/settings.local.json      → local settings overrides
 ~/.claude/projects/*/memory/*.md   → memory files across all projects
+~/.claude/projects/*/CLAUDE.md     → project-level CLAUDE.md files
+~/.claude/sessions/*.json          → session metadata
+~/.claude/history.jsonl            → conversation history
 ```
 
 It reads every file, parses the YAML frontmatter, extracts the markdown body, and generates a single self-contained HTML file with all the data embedded as a JSON blob. The LCARS interface, the CSS, the JavaScript, the syntax highlighter, the markdown renderer, the chat client, the voice synthesis, the sound effects, all inline in one HTML file. No build step, no bundler, no framework.
@@ -193,6 +205,24 @@ It still works. Empty sections render cleanly with placeholder messages. It's ac
 The LCARS design uses the authentic TNG color palette: `#FF9900` orange, `#FFCC99` peach, `#9999FF` periwinkle, `#CC99CC` lavender, `#CC9966` tan, `#FF9966` salmon, `#66CCCC` cyan. Pure black background. The signature rounded elbows connect the sidebar to the top and bottom bars. Navigation buttons have the characteristic pill shape with rounded right edges. Section headers use the Antonio typeface which is the closest web font to the actual Swiss 911 Ultra Compressed used in the show.
 
 The detail panel, the response overlay, and the code blocks all render on the black void with the blue left-border accent. Tables get orange header styling. Inline code gets the orange highlight. It's consistent, it's readable, and it looks like something that belongs on the bridge of the Enterprise-D.
+
+## Contributing
+
+Pull requests are welcome. The whole project is a single generator script (`src/generate.js`) and a server (`src/server.js`). No build step, no bundler. Fork, make your change, test it with `node src/generate.js` and `node src/server.js`, and open a PR.
+
+If you're adding a new section to the dashboard, follow the pattern in `generate.js`: a `get*()` function that reads from `~/.claude/`, an entry in the `D` data object, and the corresponding HTML block in the `gen()` function.
+
+## Reporting bugs
+
+Open an issue on GitHub. Include:
+
+- What you ran (`npx claude-hud-lcars` or `--serve`)
+- Node.js version (`node --version`)
+- OS
+- What you expected vs what happened
+- Any error output from the terminal
+
+For display issues, a screenshot helps a lot.
 
 ## License
 

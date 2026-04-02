@@ -17,7 +17,8 @@ function getSkills() {
     if (!entry.isDirectory()) continue;
     const f = path.join(dir, entry.name, 'SKILL.md');
     if (!fs.existsSync(f)) continue;
-    const raw = fs.readFileSync(f, 'utf-8');
+    let raw;
+    try { raw = fs.readFileSync(f, 'utf-8'); } catch(e) { continue; }
     const fm = raw.match(/^---\n([\s\S]*?)\n---/);
     let name = entry.name, desc = '', ver = '', ctx = '';
     if (fm) {
@@ -38,7 +39,8 @@ function getAgents() {
   const out = [];
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith('.md')) continue;
-    const raw = fs.readFileSync(path.join(dir, f), 'utf-8');
+    let raw;
+    try { raw = fs.readFileSync(path.join(dir, f), 'utf-8'); } catch(e) { continue; }
     const name = f.replace('.md', '');
     const desc = raw.match(/^description:\s*["']?(.+?)["']?\s*$/m)?.[1]?.slice(0, 200) || '';
     out.push({ name, desc, body: raw.replace(/^---\n[\s\S]*?\n---\n*/, '') });
@@ -184,7 +186,8 @@ function getMemoryFiles() {
     if (!fs.existsSync(md)) continue;
     for (const f of fs.readdirSync(md)) {
       if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
-      const raw = fs.readFileSync(path.join(md, f), 'utf-8');
+      let raw;
+      try { raw = fs.readFileSync(path.join(md, f), 'utf-8'); } catch(e) { continue; }
       out.push({
         proj: p.name.replace(/-/g, '/').replace(/^\//, ''), file: f,
         name: raw.match(/^name:\s*(.+)$/m)?.[1] || f.replace('.md', ''),
@@ -249,8 +252,10 @@ function getClaudeMdFiles() {
   // Global CLAUDE.md
   const globalPath = path.join(CLAUDE_DIR, 'CLAUDE.md');
   if (fs.existsSync(globalPath)) {
-    const raw = fs.readFileSync(globalPath, 'utf-8');
-    out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length });
+    try {
+      const raw = fs.readFileSync(globalPath, 'utf-8');
+      out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length });
+    } catch(e) {}
   }
   // Project CLAUDE.md files
   const projDir = path.join(CLAUDE_DIR, 'projects');
@@ -259,9 +264,11 @@ function getClaudeMdFiles() {
       if (!p.isDirectory()) continue;
       const cp = path.join(projDir, p.name, 'CLAUDE.md');
       if (!fs.existsSync(cp)) continue;
-      const raw = fs.readFileSync(cp, 'utf-8');
-      const proj = p.name.replace(/-/g, '/').replace(/^\//, '');
-      out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length });
+      try {
+        const raw = fs.readFileSync(cp, 'utf-8');
+        const proj = p.name.replace(/-/g, '/').replace(/^\//, '');
+        out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length });
+      } catch(e) {}
     }
   }
   return out;
@@ -4799,7 +4806,12 @@ if (args.includes('--serve') || args.includes('-s')) {
   // Live server mode
   import('./server.js');
 } else {
-  fs.writeFileSync(OUTPUT, gen());
+  try {
+    fs.writeFileSync(OUTPUT, gen());
+  } catch(e) {
+    console.error('Dashboard generation failed: ' + e.message);
+    process.exit(1);
+  }
   console.log('Dashboard generated: ' + OUTPUT);
 
   // Auto-open in browser

@@ -6,7 +6,7 @@ import path from 'path';
 import os from 'os';
 
 const PORT = parseInt(process.env.PORT || '3200');
-const API_KEY = process.env.ANTHROPIC_API_KEY;
+const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY || process.env.ANTHROPIC_API_KEY;
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
@@ -18,7 +18,7 @@ const dashboardPath = path.join(import.meta.dirname, '..', 'dashboard.html');
 // Generate dashboard on startup
 async function generateDashboard() {
   const { execSync } = await import('child_process');
-  execSync('node ' + path.join(import.meta.dirname, 'generate.js'), { stdio: 'pipe' });
+  execSync('node ' + path.join(import.meta.dirname, 'generate.js') + ' --no-open', { stdio: 'pipe' });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -485,6 +485,16 @@ const server = http.createServer(async (req, res) => {
   res.end('Not found');
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('\n  Port ' + PORT + ' is already in use.');
+    console.error('  Kill the process using it or set a different port: PORT=3201 node src/server.js\n');
+  } else {
+    console.error('Server error: ' + err.message);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
@@ -502,10 +512,4 @@ server.listen(PORT, () => {
     console.log('');
   }
 
-  // Auto-open browser
-  const url = 'http://localhost:' + PORT;
-  import('child_process').then(({ exec }) => {
-    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-    exec(cmd + ' ' + url);
-  });
 });
