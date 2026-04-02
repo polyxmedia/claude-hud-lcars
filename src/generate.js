@@ -181,7 +181,7 @@ return `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CLAUDE-HUD // LCARS</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23000'/><rect x='2' y='2' width='10' height='28' rx='5' fill='%23FF9900'/><rect x='14' y='2' width='16' height='8' rx='0' ry='0' fill='%23FF9900'/><rect x='14' y='12' width='16' height='4' fill='%239999FF'/><rect x='14' y='18' width='8' height='4' fill='%23CC99CC'/><rect x='24' y='18' width='6' height='4' fill='%23FFCC99'/><rect x='14' y='24' width='16' height='6' rx='0' fill='%239999FF'/></svg>"  type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23000'/><path d='M16 3 L26 28 L16 22 L6 28 Z' fill='%23FF9900'/><circle cx='16' cy='14' r='2.5' fill='%23000'/><line x1='8' y1='20' x2='24' y2='20' stroke='%23000' stroke-width='1.5'/></svg>" type="image/svg+xml">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -493,7 +493,13 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <div class="lcars">
 
 <nav class="sb">
-  <div class="sb-top"><h1>Claude<br>HUD</h1><small>LCARS INTERFACE // ${stardate}</small></div>
+  <div class="sb-top">
+    <div style="display:flex;align-items:center;gap:10px">
+      <svg viewBox="0 0 40 48" style="width:28px;height:34px;flex-shrink:0"><path d="M20 2 L34 44 L20 35 L6 44 Z" fill="#000" opacity="0.3"/><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="#000"/><circle cx="20" cy="18" r="3" fill="#FF9900" opacity="0.6"/></svg>
+      <h1>Claude<br>HUD</h1>
+    </div>
+    <small>LCARS INTERFACE // ${stardate}</small>
+  </div>
   <div class="sb-nav">
     ${sections.map((s,i) => `<button class="nb${i===0?' act':''}" style="background:${s.color}" onclick="nav('${s.id}',this)">${s.label} ${s.count!==null?`<span class="nc">${String(s.count).padStart(3,'0')}</span>`:''}</button>`).join('\n    ')}
   </div>
@@ -506,7 +512,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
     <span>MODEL: ${esc(S?.model||'DEFAULT')}</span>
     <span>ASSETS: ${String(skills.length+agents.length+mcp.length+hooks.length+plugins.length).padStart(3,'0')}</span>
     <span>SESSIONS: ${String(sessions).padStart(5,'0')}</span>
-    <span>STARDATE ${stardate}</span>
+    <span style="display:flex;align-items:center;gap:6px"><svg viewBox="0 0 40 48" style="width:12px;height:15px"><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="rgba(0,0,0,0.35)"/></svg>STARDATE ${stardate}</span>
   </div>
   <div class="tb-a1"></div>
   <div class="tb-a2"></div>
@@ -629,7 +635,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 <div class="computer-bar">
-  <div class="computer-bar-label">COMPUTER</div>
+  <div class="computer-bar-label"><svg viewBox="0 0 40 48" style="width:14px;height:17px;margin-right:6px"><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="#000" opacity="0.4"/></svg>COMPUTER</div>
   <div class="computer-bar-input">
     <textarea id="cb-in" placeholder="Ask the computer anything..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobal()}"></textarea>
   </div>
