@@ -694,6 +694,44 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .cfg-save-btn:hover{filter:brightness(1.2)}
 .cfg-note{font-size:0.75rem;color:var(--dim);line-height:1.6;margin-top:8px}
 
+/* ═══ TACTICAL TOOLBAR ═══ */
+.tac-toolbar{
+  display:flex;align-items:center;gap:4px;padding:8px 12px;background:#060608;
+  border-bottom:1px solid #1a1a1e;flex-shrink:0;
+}
+.tac-tab{
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  letter-spacing:0.1em;text-transform:uppercase;padding:6px 18px;
+  background:#0a0a0c;border:1px solid #222;color:var(--dim);cursor:pointer;
+  transition:all 0.15s;border-radius:0 10px 10px 0;
+}
+.tac-tab:hover{border-color:var(--blue);color:var(--text)}
+.tac-tab.act{background:rgba(85,170,255,0.1);border-color:#55AAFF;color:#55AAFF}
+.tac-spacer{flex:1}
+.tac-btn{
+  font-family:'Antonio',sans-serif;font-size:0.72rem;font-weight:600;
+  letter-spacing:0.1em;text-transform:uppercase;padding:5px 14px;
+  background:#0a0a0c;border:1px solid #222;color:var(--dim);cursor:pointer;
+  transition:all 0.15s;
+}
+.tac-btn:hover{border-color:var(--orange);color:var(--orange)}
+.tac-view{display:none;overflow:hidden}
+.tac-view.act{display:flex;flex-direction:column}
+.tac-legend{
+  position:absolute;top:12px;left:12px;
+  background:rgba(6,6,8,0.92);border:1px solid #1a1a1e;padding:10px 14px;
+  display:flex;flex-direction:column;gap:5px;pointer-events:none;
+}
+.tac-legend-row{display:flex;align-items:center;gap:8px;font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase}
+.tac-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tac-legend-label{color:var(--dim)}
+.tac-legend-count{color:var(--text);margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:0.65rem}
+.tac-hint{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  font-size:0.65rem;letter-spacing:0.12em;color:rgba(85,170,255,0.35);
+  text-transform:uppercase;pointer-events:none;
+}
+
 /* ═══ ABOUT PANEL ═══ */
 .about{padding:32px;overflow-y:auto;max-width:800px}
 .about-hero{margin-bottom:32px}
@@ -1195,9 +1233,21 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>`).join('')}
       </div>
 
-      <div class="sec" id="s-viz" style="position:relative">
-        <div id="enterprise-3d" style="width:100%;height:55%;min-height:300px;background:#020204"></div>
-        <canvas id="viz-canvas" style="width:100%;height:45%;display:block;background:#030306"></canvas>
+      <div class="sec" id="s-viz" style="position:relative;display:flex;flex-direction:column">
+        <div class="tac-toolbar">
+          <button class="tac-tab act" id="tac-tab-map" onclick="switchTac('map')">SYSTEMS MAP</button>
+          <button class="tac-tab" id="tac-tab-ship" onclick="switchTac('ship')">ENTERPRISE</button>
+          <div class="tac-spacer"></div>
+          <button class="tac-btn" onclick="resetGraph()">RECENTER</button>
+        </div>
+        <div class="tac-view act" id="tac-map" style="position:relative;flex:1;min-height:0">
+          <canvas id="viz-canvas" style="width:100%;height:100%;display:block;background:#030306"></canvas>
+          <div class="tac-legend" id="tac-legend"></div>
+          <div class="tac-hint">CLICK NODE TO OPEN // HOVER FOR DETAILS</div>
+        </div>
+        <div class="tac-view" id="tac-ship" style="position:relative;flex:1;min-height:0">
+          <div id="enterprise-3d" style="width:100%;height:100%;background:#020204"></div>
+        </div>
       </div>
 
       <div class="sec" id="s-comms">
@@ -1482,8 +1532,8 @@ function nav(id,el){
   el.classList.add('act');
   close_();
   try{localStorage.setItem('hud-tab',id)}catch(e){}
-  // In comms/about mode, hide the detail panel column entirely
-  if (id === 'comms' || id === 'about') {
+  // In comms/about/viz mode, hide the detail panel column entirely
+  if (id === 'comms' || id === 'about' || id === 'viz') {
     document.getElementById('mc').classList.remove('open');
     document.getElementById('dp').style.display = 'none';
   } else {
@@ -3125,6 +3175,38 @@ function sendGlobal() {
   });
 }
 
+// ═══ TACTICAL TAB SWITCHING ═══
+function switchTac(view) {
+  document.querySelectorAll('.tac-view').forEach(function(v) { v.classList.remove('act'); });
+  document.querySelectorAll('.tac-tab').forEach(function(t) { t.classList.remove('act'); });
+  document.getElementById('tac-' + view).classList.add('act');
+  document.getElementById('tac-tab-' + view).classList.add('act');
+  beepNav();
+}
+
+function buildLegend() {
+  var el = document.getElementById('tac-legend');
+  if (!el) return;
+  var cats = [
+    { color: '#9999FF', label: 'Skills', count: VIZ.skills.length },
+    { color: '#FF9900', label: 'MCP Servers', count: VIZ.mcp.length },
+    { color: '#CC9966', label: 'Hooks', count: VIZ.hooks.length },
+    { color: '#CC99CC', label: 'Plugins', count: VIZ.plugins.length },
+    { color: '#FFCC99', label: 'Agents', count: VIZ.agents.length },
+    { color: '#66CCCC', label: 'Environment', count: VIZ.env.length },
+    { color: '#9999CC', label: 'Memory', count: VIZ.mem.length },
+  ];
+  el.innerHTML = cats.filter(function(c) { return c.count > 0; }).map(function(c) {
+    return '<div class="tac-legend-row"><span class="tac-legend-dot" style="background:' + c.color + '"></span><span class="tac-legend-label">' + c.label + '</span><span class="tac-legend-count">' + c.count + '</span></div>';
+  }).join('');
+}
+
+var resetGraphFn = null;
+function resetGraph() {
+  if (resetGraphFn) resetGraphFn();
+  beepAction();
+}
+
 // ═══ TACTICAL VISUALISATION ═══
 (function() {
   var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null;
@@ -3380,7 +3462,8 @@ function sendGlobal() {
   function initViz() {
     canvas = document.getElementById('viz-canvas');
     if (!canvas) return;
-    var sec = document.getElementById('s-viz');
+    var sec = document.getElementById('tac-map');
+    buildLegend();
 
     function resize() {
       var rect = sec.getBoundingClientRect();
@@ -3399,6 +3482,7 @@ function sendGlobal() {
       var rect = canvas.getBoundingClientRect();
       mouseX = e.clientX - rect.left;
       mouseY = e.clientY - rect.top;
+      canvas.style.cursor = hoveredNode ? 'pointer' : 'default';
     });
     canvas.addEventListener('mouseleave', function() { mouseX = mouseY = -1; });
     canvas.addEventListener('click', function() {
@@ -3424,6 +3508,7 @@ function sendGlobal() {
     });
 
     buildGraph();
+    resetGraphFn = function() { buildGraph(); };
     tick();
   }
 
@@ -3612,6 +3697,7 @@ function sendGlobal() {
     '',
     '// Resize',
     'window.addEventListener("resize", function() {',
+    '  if (!container.offsetParent) return;',
     '  var W = container.clientWidth, H = container.clientHeight;',
     '  camera.aspect = W / H;',
     '  camera.updateProjectionMatrix();',
