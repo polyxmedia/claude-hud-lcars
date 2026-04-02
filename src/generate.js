@@ -133,14 +133,12 @@ function getSessions() {
   const out = [];
   const d = path.join(CLAUDE_DIR, 'sessions');
   if (!fs.existsSync(d)) return out;
-  for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const jsonPath = path.join(d, entry.name, 'session.json');
-    if (!fs.existsSync(jsonPath)) continue;
+  for (const f of fs.readdirSync(d)) {
+    if (!f.endsWith('.json')) continue;
     try {
-      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+      const raw = JSON.parse(fs.readFileSync(path.join(d, f), 'utf-8'));
       out.push({
-        id: raw.sessionId || entry.name,
+        id: raw.sessionId || f.replace('.json',''),
         pid: raw.pid || '',
         cwd: raw.cwd || '',
         project: (raw.cwd || '').split('/').slice(-2).join('/'),
