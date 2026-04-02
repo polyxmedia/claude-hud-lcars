@@ -2225,7 +2225,7 @@ function doAction(btn){
     });
   } else if(icon==='DEL'){
     var currentKey = document.querySelector('.r.sel')?document.querySelector('.r.sel').getAttribute('data-k'):'';
-    hudConfirm('Delete this item permanently?\n\n' + cmd, 'DELETE').then(function(ok){
+    hudConfirm('Delete this item permanently?\\n\\n' + cmd, 'DELETE').then(function(ok){
       if(!ok) return;
       if(window.HUD_LIVE){
         if(cmd.startsWith('mcp:')){
@@ -3568,7 +3568,7 @@ function installSuggestSkill(btn, name, content) {
       var key = 's:'+name;
       if(window._D) window._D[key] = { t:name, tp:'SKILL MODULE', m:'', b:content,
         actions:[{label:'INVOKE',cmd:'/'+name,icon:'RUN'},{label:'DELETE',cmd:skillDir,icon:'DEL'}]};
-      _addRow('s-skills','<div class="r" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
+      _addRow('s-skills','<div class="r" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
       _removeCard(btn);
       if(window._D) delete window._D['sugg:skill:'+name];
       toast('SKILL INSTALLED: ' + name); beepAction();
@@ -3588,7 +3588,7 @@ function installSuggestAgent(btn, name, content) {
       var key = 'a:'+name;
       if(window._D) window._D[key] = { t:name, tp:'AGENT DEFINITION', m:'', b:content,
         actions:[{label:'DELETE',cmd:filePath,icon:'DEL'}]};
-      _addRow('s-agents','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
+      _addRow('s-agents','<div class="r r2" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
       _removeCard(btn);
       if(window._D) delete window._D['sugg:agent:'+name];
       toast('AGENT DEPLOYED: ' + name); beepAction();
@@ -3635,7 +3635,7 @@ function installSuggestHook(btn, event, matcher, cmd) {
       var tempKey = 'h:new-'+Date.now();
       if(window._D) window._D[tempKey] = { t:event+' // '+(matcher||'*'), tp:'HOOK INTERCEPT', m:'TYPE: command', b:JSON.stringify(hook,null,2),
         actions:[{label:'COPY HOOK JSON',cmd:JSON.stringify(hook,null,2),icon:'COPY'}]};
-      _addRow('s-hooks','<div class="r" onclick="open_(\''+tempKey+'\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">command</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
+      _addRow('s-hooks','<div class="r" onclick="open_(\\\''+tempKey+'\\\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">command</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
       _removeCard(btn);
       toast('HOOK INSTALLED: ' + event); beepAction();
     } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
@@ -3669,7 +3669,7 @@ function createSkill() {
       var key = 's:'+name;
       if(window._D) window._D[key] = { t:name, tp:'SKILL MODULE', m:ctx+'//v1.0.0', b:body,
         actions:[{label:'INVOKE',cmd:'/'+name,icon:'RUN'},{label:'DELETE',cmd:dir,icon:'DEL'}]};
-      _addRow('s-skills','<div class="r" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"><span class="tg tg-b">'+ctx+'</span><span class="tg tg-d">v1.0.0</span></span><span class="r-d">'+desc+'</span></div>');
+      _addRow('s-skills','<div class="r" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"><span class="tg tg-b">'+ctx+'</span><span class="tg tg-d">v1.0.0</span></span><span class="r-d">'+desc+'</span></div>');
       toggleCreate('skill');
       document.getElementById('cf-skill-name').value='';
       document.getElementById('cf-skill-desc').value='';
@@ -3731,7 +3731,7 @@ function createHook() {
       var tempKey = 'h:new-'+Date.now();
       if(window._D) window._D[tempKey] = { t:event+' // '+(matcher||'*'), tp:'HOOK INTERCEPT', m:'TYPE: '+type, b:JSON.stringify(hook,null,2),
         actions:[{label:'COPY HOOK JSON',cmd:JSON.stringify(hook,null,2),icon:'COPY'}]};
-      _addRow('s-hooks','<div class="r" onclick="open_(\''+tempKey+'\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">'+type+'</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
+      _addRow('s-hooks','<div class="r" onclick="open_(\\\''+tempKey+'\\\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">'+type+'</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
       toggleCreate('hook');
       document.getElementById('cf-hook-cmd').value='';
       document.getElementById('cf-hook-matcher').value='';
@@ -3759,7 +3759,7 @@ function createAgent() {
       var key = 'a:'+name;
       if(window._D) window._D[key] = { t:name, tp:'AGENT DEFINITION', m:'', b:content,
         actions:[{label:'DELETE',cmd:filePath,icon:'DEL'}]};
-      _addRow('s-agents','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
+      _addRow('s-agents','<div class="r r2" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
       toggleCreate('agent');
       ['cf-agent-name','cf-agent-desc','cf-agent-tools','cf-agent-body'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
       toast('AGENT DEPLOYED: ' + name); beepAction();
@@ -3779,7 +3779,7 @@ function createEnv() {
       var key = 'v:'+envKey;
       if(window._D) window._D[key] = { t:envKey, tp:'ENV VARIABLE', m:'', b:'**'+envKey+'**: '+val,
         actions:[{label:'COPY VALUE',cmd:val,icon:'COPY'}]};
-      _addRow('s-env','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+envKey+'</span><span class="r-tg"></span><span class="r-d">••••••••</span></div>');
+      _addRow('s-env','<div class="r r2" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+envKey+'</span><span class="r-tg"></span><span class="r-d">••••••••</span></div>');
       toggleCreate('env');
       document.getElementById('cf-env-key').value='';
       document.getElementById('cf-env-val').value='';
@@ -3798,7 +3798,7 @@ function createPlugin() {
     if(d.ok){
       var key = 'p:'+id;
       if(window._D) window._D[key] = { t:id, tp:'PLUGIN', m:'ACTIVE', b:JSON.stringify({id:id,enabled:true},null,2), actions:[] };
-      _addRow('s-plugins','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+id+'</span><span class="tg tg-g">ACTIVE</span></div>');
+      _addRow('s-plugins','<div class="r r2" onclick="open_(\\\''+key+'\\\')" data-k="'+key+'"><span class="r-id">'+id+'</span><span class="tg tg-g">ACTIVE</span></div>');
       toggleCreate('plugin');
       document.getElementById('cf-plugin-id').value='';
       toast('PLUGIN ENABLED: ' + id); beepAction();

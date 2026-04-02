@@ -36,3 +36,13 @@ Free to use, modify, and share — commercial use not permitted.
 ## 2026-04-02 - fix dashboard: zoom, Q tab visibility, search highlight, auto-detect server
 
 ## 2026-04-02 - CLI: auto-open browser, --serve flag, --help
+
+## 2026-04-02 - $(cat <<
+
+## 2026-04-02 - feat: delete for all items, suggest card detail panel, fix changelog hook
+
+## 2026-04-02 - fix: strengthen LCARS identity — never breaks character, explicit responses to who/what questions
+
+## 2026-04-02 - feat: default chat to Sonnet, Discover model config (default Opus), fix Haiku option value
+
+## 2026-04-02 - feat: seamless install/delete (no reload), LCARS confirm modal, fixed markdown panel padding

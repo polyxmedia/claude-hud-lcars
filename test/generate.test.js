@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1008,5 +1009,28 @@ describe('getClaudeMdFiles', () => {
       assert.doesNotThrow(() => getClaudeMdFiles(tmp));
       assert.deepEqual(getClaudeMdFiles(tmp), []);
     } finally { rimraf(tmp); }
+  });
+});
+
+// ── generated dashboard JS syntax ────────────────────────────────────────────
+
+describe('generated dashboard', () => {
+  test('inline JS has no syntax errors', () => {
+    const root = path.join(import.meta.dirname, '..');
+    const html = execSync('node src/generate.js --no-open 2>/dev/null && cat dashboard.html', { cwd: root }).toString();
+    const start = html.indexOf('<script>') + 8;
+    const end = html.lastIndexOf('</script>');
+    assert.ok(start > 8, 'should find <script> tag');
+    const js = html.slice(start, end);
+
+    const tmp = path.join(os.tmpdir(), 'hud-syntax-check.js');
+    fs.writeFileSync(tmp, js);
+    try {
+      execSync('node --check ' + tmp, { stdio: 'pipe' });
+    } catch (e) {
+      assert.fail('Generated dashboard JS has syntax errors:\n' + e.stderr.toString().slice(0, 500));
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
   });
 });
