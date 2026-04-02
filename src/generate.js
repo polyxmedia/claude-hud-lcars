@@ -832,6 +832,18 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .suggest-install:hover{background:#FFAA22}
 .suggest-install:disabled{background:#2a2a2a;color:#555;cursor:default}
 
+/* ═══ CONFIRM MODAL ═══ */
+.hud-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;animation:fadein .15s}
+.hud-modal{background:#08080f;border:2px solid var(--orange);padding:28px 32px;max-width:460px;width:90%;animation:slidein .15s}
+@keyframes slidein{from{transform:translateY(-16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.hud-modal-title{font-size:0.65rem;letter-spacing:.2em;color:var(--orange);text-transform:uppercase;margin-bottom:14px}
+.hud-modal-msg{color:#ccc;margin-bottom:24px;line-height:1.7;font-size:0.82rem;white-space:pre-wrap;word-break:break-all}
+.hud-modal-actions{display:flex;gap:10px;justify-content:flex-end}
+.hud-modal-cancel{background:transparent;border:1px solid #2a2a2a;color:#666;padding:7px 18px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;letter-spacing:.1em;cursor:pointer;text-transform:uppercase;transition:border-color .15s}
+.hud-modal-cancel:hover{border-color:#555;color:#aaa}
+.hud-modal-confirm{background:#8b0000;border:none;color:#fff;padding:7px 18px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;letter-spacing:.1em;cursor:pointer;font-weight:700;text-transform:uppercase;transition:background .15s}
+.hud-modal-confirm:hover{background:#cc0000}
+
 /* ═══ DETAIL PANEL (PADD) ═══ */
 .dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative;border-radius:12px}
 .mn-content.open .dp{opacity:1}
@@ -850,7 +862,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 .dp-x:hover{filter:brightness(1.3)}
 
-.dp-b{padding:20px;font-size:0.88rem;line-height:1.8;color:var(--text)}
+.dp-b{padding:24px 28px;font-size:0.88rem;line-height:1.8;color:var(--text)}
 .dp-b h1,.dp-b h2,.dp-b h3{font-family:'Antonio',sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 10px;line-height:1.2}
 .dp-b h1{font-size:1.4rem;color:var(--peach);border-bottom:2px solid #1a1a1e;padding-bottom:8px}
 .dp-b h2{font-size:1.15rem;color:var(--peach)}
@@ -877,8 +889,11 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .dp-b pre .bool{color:var(--salmon)}
 .dp-b pre .cmt{color:var(--dim);font-style:italic}
 .dp-b pre .punc{color:#888}
-.dp-b ul,.dp-b ol{padding-left:22px;margin-bottom:10px}
-.dp-b li{margin-bottom:4px}
+.dp-b ul,.dp-b ol{padding-left:28px;margin:8px 0 12px;list-style-position:outside}
+.dp-b ul{list-style-type:disc}
+.dp-b ol{list-style-type:decimal}
+.dp-b li{margin-bottom:6px;padding-left:4px}
+.dp-b li::marker{color:var(--orange)}
 .dp-b strong{color:#eee}
 .dp-b table{width:100%;border-collapse:collapse;margin:10px 0;font-size:0.82rem}
 .dp-b th{text-align:left;padding:8px;border-bottom:2px solid var(--orange);color:var(--orange);font-weight:600;text-transform:uppercase;font-size:0.72rem;letter-spacing:0.08em}
@@ -2209,37 +2224,40 @@ function doAction(btn){
       toast('Copied: '+cmd);
     });
   } else if(icon==='DEL'){
-    if(!confirm('Delete this item permanently?\\n\\n'+cmd)) return;
-    if(window.HUD_LIVE){
-      if(cmd.startsWith('mcp:')){
-        var mcpName=cmd.slice(4);
-        fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({type:'remove-mcp',name:mcpName})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.ok){toast('REMOVED: '+mcpName);close_();setTimeout(function(){location.reload()},600);}
-          else toast('ERROR: '+d.error);
-        });
-      } else if(cmd.startsWith('hook:')){
-        var hookIdx=parseInt(cmd.slice(5));
-        fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({type:'remove-hook',index:hookIdx})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.ok){toast('HOOK REMOVED');close_();setTimeout(function(){location.reload()},600);}
-          else toast('ERROR: '+d.error);
-        });
+    var currentKey = document.querySelector('.r.sel')?document.querySelector('.r.sel').getAttribute('data-k'):'';
+    hudConfirm('Delete this item permanently?\n\n' + cmd, 'DELETE').then(function(ok){
+      if(!ok) return;
+      if(window.HUD_LIVE){
+        if(cmd.startsWith('mcp:')){
+          var mcpName=cmd.slice(4);
+          fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({type:'remove-mcp',name:mcpName})
+          }).then(function(r){return r.json()}).then(function(d){
+            if(d.ok){toast('REMOVED: '+mcpName);close_();_removeRow('m:'+mcpName);}
+            else toast('ERROR: '+d.error);
+          });
+        } else if(cmd.startsWith('hook:')){
+          var hookIdx=parseInt(cmd.slice(5));
+          fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({type:'remove-hook',index:hookIdx})
+          }).then(function(r){return r.json()}).then(function(d){
+            if(d.ok){toast('HOOK REMOVED');close_();_removeRow(currentKey);}
+            else toast('ERROR: '+d.error);
+          });
+        } else {
+          fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({path:cmd})
+          }).then(function(r){return r.json()}).then(function(d){
+            if(d.ok){toast('DELETED');close_();_removeRow(currentKey);}
+            else toast('ERROR: '+d.error);
+          });
+        }
       } else {
-        fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({path:cmd})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.ok){toast('DELETED');close_();setTimeout(function(){location.reload()},600);}
-          else toast('ERROR: '+d.error);
+        navigator.clipboard.writeText('rm -rf '+cmd).then(function(){
+          toast('Copied delete command');
         });
       }
-    } else {
-      navigator.clipboard.writeText('rm -rf '+cmd).then(function(){
-        toast('Copied delete command');
-      });
-    }
+    });
   } else if(icon==='INSTALL'){
     var parts=cmd.split(':');
     var itype=parts[1], iname=parts.slice(2).join(':');
@@ -3480,56 +3498,148 @@ function toggleDiscover(hdr, id) {
   beepNav();
 }
 
+// ═══ LCARS CONFIRM MODAL ═══
+function hudConfirm(msg, confirmLabel) {
+  return new Promise(function(resolve) {
+    var ov = document.createElement('div');
+    ov.className = 'hud-modal-overlay';
+    ov.innerHTML = '<div class="hud-modal"><div class="hud-modal-title">&#9888; Confirm Action</div><div class="hud-modal-msg">' + msg.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div><div class="hud-modal-actions"><button class="hud-modal-cancel">CANCEL</button><button class="hud-modal-confirm">' + (confirmLabel||'CONFIRM') + '</button></div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('.hud-modal-cancel').onclick = function() { ov.remove(); resolve(false); };
+    ov.querySelector('.hud-modal-confirm').onclick = function() { ov.remove(); resolve(true); };
+    ov.onclick = function(e) { if(e.target===ov) { ov.remove(); resolve(false); } };
+    document.addEventListener('keydown', function esc(e) { if(e.key==='Escape'){ov.remove();resolve(false);document.removeEventListener('keydown',esc);} });
+  });
+}
+
+// ═══ SEAMLESS DOM HELPERS ═══
+function _removeCard(btn) {
+  var card = btn;
+  while(card && !card.classList.contains('suggest-card')) card = card.parentNode;
+  if(!card) return;
+  card.style.transition = 'opacity .25s, transform .25s';
+  card.style.opacity = '0'; card.style.transform = 'scale(0.95)';
+  setTimeout(function() {
+    var body = card.parentNode;
+    if(card.parentNode) card.remove();
+    if(body && body.children.length === 0) {
+      var discover = body.parentNode;
+      if(discover && discover.classList.contains('discover')) discover.remove();
+    }
+  }, 260);
+}
+
+function _removeRow(key) {
+  var row = document.querySelector('[data-k="' + key + '"]');
+  if(!row) return;
+  row.style.transition = 'opacity .2s, max-height .3s';
+  row.style.opacity = '0';
+  setTimeout(function() { if(row.parentNode) row.remove(); }, 220);
+  // Also remove from D
+  if(window._D) delete window._D[key];
+}
+
+function _addRow(sectionId, html, key) {
+  var sec = document.getElementById(sectionId);
+  if(!sec) return;
+  // Remove "no items" placeholder
+  var emp = sec.querySelector('.emp');
+  if(emp) emp.remove();
+  var discover = sec.querySelector('.discover');
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html.trim();
+  var el = tmp.firstElementChild;
+  el.style.opacity = '0';
+  if(discover) sec.insertBefore(el, discover);
+  else sec.appendChild(el);
+  setTimeout(function() { el.style.transition = 'opacity .3s'; el.style.opacity = '1'; }, 10);
+}
+
 function installSuggestSkill(btn, name, content) {
   if (!window.HUD_LIVE) { toast('Live mode required'); return; }
   btn.disabled = true; btn.textContent = '...';
   var filePath = '${esc(path.join(CLAUDE_DIR, 'skills'))}/' + name + '/SKILL.md';
-  fetch('/api/save', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+  var skillDir  = '${esc(path.join(CLAUDE_DIR, 'skills'))}/' + name;
+  fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('SKILL INSTALLED: ' + name); setTimeout(function() { location.reload(); }, 800); }
-    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
-  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var desc = (content.match(/^description:\\s*["']?(.+?)["']?\\s*$/m)||[])[1]||'';
+      var key = 's:'+name;
+      if(window._D) window._D[key] = { t:name, tp:'SKILL MODULE', m:'', b:content,
+        actions:[{label:'INVOKE',cmd:'/'+name,icon:'RUN'},{label:'DELETE',cmd:skillDir,icon:'DEL'}]};
+      _addRow('s-skills','<div class="r" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
+      _removeCard(btn);
+      if(window._D) delete window._D['sugg:skill:'+name];
+      toast('SKILL INSTALLED: ' + name); beepAction();
+    } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
+  }).catch(function(e){ btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+e.message); });
 }
 
 function installSuggestAgent(btn, name, content) {
   if (!window.HUD_LIVE) { toast('Live mode required'); return; }
   btn.disabled = true; btn.textContent = '...';
   var filePath = '${esc(path.join(CLAUDE_DIR, 'agents'))}/' + name + '.md';
-  fetch('/api/save', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('AGENT DEPLOYED: ' + name); setTimeout(function() { location.reload(); }, 800); }
-    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
-  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+  fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ path: filePath, content: content }),
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var desc = (content.match(/^description:\\s*["']?(.+?)["']?\\s*$/m)||[])[1]||'';
+      var key = 'a:'+name;
+      if(window._D) window._D[key] = { t:name, tp:'AGENT DEFINITION', m:'', b:content,
+        actions:[{label:'DELETE',cmd:filePath,icon:'DEL'}]};
+      _addRow('s-agents','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
+      _removeCard(btn);
+      if(window._D) delete window._D['sugg:agent:'+name];
+      toast('AGENT DEPLOYED: ' + name); beepAction();
+    } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
+  }).catch(function(e){ btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+e.message); });
 }
 
 function installSuggestMcp(btn, name, configJson) {
   if (!window.HUD_LIVE) { toast('Live mode required'); return; }
   btn.disabled = true; btn.textContent = '...';
   var config = JSON.parse(configJson);
-  fetch('/api/settings-update', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ type: 'add-mcp', name: name, config: config }),
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('MCP REGISTERED: ' + name); setTimeout(function() { location.reload(); }, 800); }
-    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
-  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 'm:'+name;
+      var cmdStr = (config.command||'') + ' ' + (config.args||[]).join(' ');
+      if(window._D) window._D[key] = { t:name, tp:'MCP SERVER CONFIG', m:cmdStr, b:JSON.stringify(config,null,2),
+        actions:[{label:'COPY CONFIG',cmd:JSON.stringify(config,null,2),icon:'COPY'},{label:'DELETE',cmd:'mcp:'+name,icon:'DEL'}]};
+      var mcpGrid = document.querySelector('#s-mcp .mcp-grid');
+      if(mcpGrid){
+        var card = document.createElement('div');
+        card.className='mcp-card'; card.setAttribute('data-k',key); card.style.opacity='0';
+        card.onclick=function(){open_(key)};
+        card.innerHTML='<div class="mcp-card-top"><div class="mcp-card-status unknown"></div><div class="mcp-card-name">'+name+'</div><span class="mcp-card-type">'+config.command+'</span></div><div class="mcp-card-body"><div class="mcp-card-row"><span class="mcp-card-label">CMD</span><span class="mcp-card-val">'+cmdStr+'</span></div></div><div class="mcp-card-footer"><div class="mcp-card-bar"></div><div class="mcp-card-status-label unknown">CONFIGURED</div></div>';
+        mcpGrid.appendChild(card);
+        setTimeout(function(){card.style.transition='opacity .3s';card.style.opacity='1';},10);
+      }
+      _removeCard(btn);
+      if(window._D) delete window._D['sugg:mcp:'+name];
+      toast('MCP REGISTERED: ' + name); beepAction();
+    } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
+  }).catch(function(e){ btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+e.message); });
 }
 
 function installSuggestHook(btn, event, matcher, cmd) {
   if (!window.HUD_LIVE) { toast('Live mode required'); return; }
   btn.disabled = true; btn.textContent = '...';
   var hook = { type: 'command', command: cmd };
-  fetch('/api/settings-update', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ type: 'add-hook', event: event, matcher: matcher || undefined, hook: hook }),
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.ok) { btn.textContent = 'INSTALLED'; btn.style.background='#1a3a1a'; btn.style.color='#4a8a4a'; toast('HOOK INSTALLED: ' + event); setTimeout(function() { location.reload(); }, 800); }
-    else { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + d.error); }
-  }).catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var tempKey = 'h:new-'+Date.now();
+      if(window._D) window._D[tempKey] = { t:event+' // '+(matcher||'*'), tp:'HOOK INTERCEPT', m:'TYPE: command', b:JSON.stringify(hook,null,2),
+        actions:[{label:'COPY HOOK JSON',cmd:JSON.stringify(hook,null,2),icon:'COPY'}]};
+      _addRow('s-hooks','<div class="r" onclick="open_(\''+tempKey+'\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">command</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
+      _removeCard(btn);
+      toast('HOOK INSTALLED: ' + event); beepAction();
+    } else { btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+d.error); }
+  }).catch(function(e){ btn.disabled=false; btn.textContent='+ INSTALL'; toast('ERROR: '+e.message); });
 }
 
 // ═══ CREATE NEW ITEMS ═══
@@ -3552,19 +3662,21 @@ function createSkill() {
   var dir = '${esc(path.join(CLAUDE_DIR, 'skills'))}/' + name;
   var filePath = dir + '/SKILL.md';
 
-  // Create directory first
-  fetch('/api/save', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+  fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('SKILL CREATED: ' + name);
-      beepAction();
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 's:'+name;
+      if(window._D) window._D[key] = { t:name, tp:'SKILL MODULE', m:ctx+'//v1.0.0', b:body,
+        actions:[{label:'INVOKE',cmd:'/'+name,icon:'RUN'},{label:'DELETE',cmd:dir,icon:'DEL'}]};
+      _addRow('s-skills','<div class="r" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"><span class="tg tg-b">'+ctx+'</span><span class="tg tg-d">v1.0.0</span></span><span class="r-d">'+desc+'</span></div>');
       toggleCreate('skill');
-      setTimeout(function() { location.reload(); }, 500);
+      document.getElementById('cf-skill-name').value='';
+      document.getElementById('cf-skill-desc').value='';
+      document.getElementById('cf-skill-body').value='';
+      toast('SKILL CREATED: ' + name); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 function createMcp() {
@@ -3573,21 +3685,32 @@ function createMcp() {
   var cmd = document.getElementById('cf-mcp-cmd').value.trim();
   var argsStr = document.getElementById('cf-mcp-args').value.trim();
   if (!name || !cmd) { toast('Name and command required'); return; }
-
   var args = argsStr ? argsStr.split(/\\s+/) : [];
-  // Read current settings, add server, save back
-  fetch('/api/settings-update', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ type: 'add-mcp', name: name, config: { command: cmd, args: args } }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('MCP SERVER REGISTERED: ' + name);
-      beepAction();
+  var config = { command: cmd, args: args };
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ type: 'add-mcp', name: name, config: config }),
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 'm:'+name;
+      var cmdStr = cmd + ' ' + args.join(' ');
+      if(window._D) window._D[key] = { t:name, tp:'MCP SERVER CONFIG', m:cmdStr, b:JSON.stringify(config,null,2),
+        actions:[{label:'COPY CONFIG',cmd:JSON.stringify(config,null,2),icon:'COPY'},{label:'DELETE',cmd:'mcp:'+name,icon:'DEL'}]};
+      var mcpGrid = document.querySelector('#s-mcp .mcp-grid');
+      if(mcpGrid){
+        var card = document.createElement('div');
+        card.className='mcp-card'; card.setAttribute('data-k',key); card.style.opacity='0';
+        card.onclick=function(){open_(key)};
+        card.innerHTML='<div class="mcp-card-top"><div class="mcp-card-status unknown"></div><div class="mcp-card-name">'+name+'</div><span class="mcp-card-type">'+cmd+'</span></div><div class="mcp-card-body"><div class="mcp-card-row"><span class="mcp-card-label">CMD</span><span class="mcp-card-val">'+cmdStr+'</span></div></div><div class="mcp-card-footer"><div class="mcp-card-bar"></div><div class="mcp-card-status-label unknown">CONFIGURED</div></div>';
+        mcpGrid.appendChild(card);
+        setTimeout(function(){card.style.transition='opacity .3s';card.style.opacity='1';},10);
+      }
       toggleCreate('mcp');
-      setTimeout(function() { location.reload(); }, 500);
+      document.getElementById('cf-mcp-name').value='';
+      document.getElementById('cf-mcp-cmd').value='';
+      document.getElementById('cf-mcp-args').value='';
+      toast('MCP REGISTERED: ' + name); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 function createHook() {
@@ -3597,24 +3720,24 @@ function createHook() {
   var type = getLcarsValue('cf-hook-type-wrap') || 'command';
   var cmd = document.getElementById('cf-hook-cmd').value.trim();
   if (!cmd) { toast('Command/prompt required'); return; }
-
   var hook = { type: type };
   if (type === 'command') hook.command = cmd;
   else if (type === 'prompt' || type === 'agent') hook.prompt = cmd;
   else if (type === 'http') hook.url = cmd;
-
-  fetch('/api/settings-update', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ type: 'add-hook', event: event, matcher: matcher || undefined, hook: hook }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('HOOK CREATED: ' + event);
-      beepAction();
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var tempKey = 'h:new-'+Date.now();
+      if(window._D) window._D[tempKey] = { t:event+' // '+(matcher||'*'), tp:'HOOK INTERCEPT', m:'TYPE: '+type, b:JSON.stringify(hook,null,2),
+        actions:[{label:'COPY HOOK JSON',cmd:JSON.stringify(hook,null,2),icon:'COPY'}]};
+      _addRow('s-hooks','<div class="r" onclick="open_(\''+tempKey+'\')" data-k="'+tempKey+'"><span class="r-id">'+event+'</span><span class="r-tg"><span class="tg tg-t">'+type+'</span>'+(matcher?'<span class="tg tg-b">'+matcher+'</span>':'')+'</span><span class="r-d">'+cmd.slice(0,100)+'</span></div>');
       toggleCreate('hook');
-      setTimeout(function() { location.reload(); }, 500);
+      document.getElementById('cf-hook-cmd').value='';
+      document.getElementById('cf-hook-matcher').value='';
+      toast('HOOK CREATED: ' + event); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 function createAgent() {
@@ -3629,57 +3752,58 @@ function createAgent() {
   var content = '---\\ndescription: "' + desc.replace(/"/g, '\\\\"') + '"' + toolsList + '\\n---\\n\\n' + body;
   var filePath = '${esc(path.join(CLAUDE_DIR, 'agents'))}/' + name + '.md';
 
-  fetch('/api/save', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+  fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ path: filePath, content: content }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('AGENT DEPLOYED: ' + name);
-      beepAction();
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 'a:'+name;
+      if(window._D) window._D[key] = { t:name, tp:'AGENT DEFINITION', m:'', b:content,
+        actions:[{label:'DELETE',cmd:filePath,icon:'DEL'}]};
+      _addRow('s-agents','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+name+'</span><span class="r-tg"></span><span class="r-d">'+desc+'</span></div>');
       toggleCreate('agent');
-      setTimeout(function() { location.reload(); }, 500);
+      ['cf-agent-name','cf-agent-desc','cf-agent-tools','cf-agent-body'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+      toast('AGENT DEPLOYED: ' + name); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 function createEnv() {
   if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
-  var key = document.getElementById('cf-env-key').value.trim().toUpperCase();
+  var envKey = document.getElementById('cf-env-key').value.trim().toUpperCase();
   var val = document.getElementById('cf-env-val').value.trim();
-  if (!key) { toast('Variable name required'); return; }
-
-  fetch('/api/settings-update', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ type: 'add-env', key: key, value: val }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('ENV SET: ' + key);
-      beepAction();
+  if (!envKey) { toast('Variable name required'); return; }
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ type: 'add-env', key: envKey, value: val }),
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 'v:'+envKey;
+      if(window._D) window._D[key] = { t:envKey, tp:'ENV VARIABLE', m:'', b:'**'+envKey+'**: '+val,
+        actions:[{label:'COPY VALUE',cmd:val,icon:'COPY'}]};
+      _addRow('s-env','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+envKey+'</span><span class="r-tg"></span><span class="r-d">••••••••</span></div>');
       toggleCreate('env');
-      setTimeout(function() { location.reload(); }, 500);
+      document.getElementById('cf-env-key').value='';
+      document.getElementById('cf-env-val').value='';
+      toast('ENV SET: ' + envKey); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 function createPlugin() {
   if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
   var id = document.getElementById('cf-plugin-id').value.trim();
   if (!id) { toast('Plugin ID required'); return; }
-
-  fetch('/api/settings-update', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ type: 'add-plugin', id: id }),
-  }).then(function(r) { return r.json() }).then(function(d) {
-    if (d.ok) {
-      toast('PLUGIN ENABLED: ' + id);
-      beepAction();
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      var key = 'p:'+id;
+      if(window._D) window._D[key] = { t:id, tp:'PLUGIN', m:'ACTIVE', b:JSON.stringify({id:id,enabled:true},null,2), actions:[] };
+      _addRow('s-plugins','<div class="r r2" onclick="open_(\''+key+'\')" data-k="'+key+'"><span class="r-id">'+id+'</span><span class="tg tg-g">ACTIVE</span></div>');
       toggleCreate('plugin');
-      setTimeout(function() { location.reload(); }, 500);
+      document.getElementById('cf-plugin-id').value='';
+      toast('PLUGIN ENABLED: ' + id); beepAction();
     } else { toast('ERROR: ' + d.error); }
-  }).catch(function(e) { toast('ERROR: ' + e.message); });
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
 // ═══ MCP STATUS CHECK ═══
