@@ -1129,14 +1129,14 @@ function open_(k){
   }
 
   document.getElementById('mc').classList.add('open');
-  document.querySelectorAll('.r.sel').forEach(function(r){r.classList.remove('sel')});
-  var row=document.querySelector('[data-k="'+k+'"]');
+  document.querySelectorAll('.sel').forEach(function(r){r.classList.remove('sel')});
+  var row=document.querySelector('[data-k="'+k+'"]') || document.querySelector('[data-mcp="'+k.replace('m:','')+'"]');
   if(row)row.classList.add('sel');
 }
 
 function close_(){
   document.getElementById('mc').classList.remove('open');
-  document.querySelectorAll('.r.sel').forEach(r=>r.classList.remove('sel'));
+  document.querySelectorAll('.sel').forEach(function(r){r.classList.remove('sel')});
 }
 
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close_()});
@@ -1562,8 +1562,8 @@ function openEditor(filePath) {
   var textarea = document.getElementById('editor-textarea');
   var dpBody = document.getElementById('dp-b');
   var editor = document.getElementById('hud-editor');
-  var currentKey = document.querySelector('.r.sel');
-  var key = currentKey ? currentKey.getAttribute('data-k') : null;
+  var currentKey = document.querySelector('.r.sel') || document.querySelector('.mcp-card.sel');
+  var key = currentKey ? (currentKey.getAttribute('data-k') || currentKey.getAttribute('data-mcp') && 'm:'+currentKey.getAttribute('data-mcp')) : null;
   var rawContent = key && D[key] ? D[key].b : '';
 
   textarea.value = rawContent;
