@@ -15,11 +15,23 @@ Your entire Claude Code setup, rendered as a Star Trek LCARS terminal. Skills, a
 
 There's also a built-in AI chat that responds as the Federation LCARS computer. With voice output. And sound effects. Because if you're going to build an operations dashboard for an AI coding tool, you might as well commit to the bit.
 
+## Quick start
+
 ```bash
+# Generate dashboard and open in browser
 npx claude-hud-lcars
+
+# Live mode with AI chat, voice, and file editing
+ANTHROPIC_API_KEY=sk-ant-... npx claude-hud-lcars --serve
+
+# Generate without opening
+npx claude-hud-lcars --no-open
+
+# Install globally
+npm install -g claude-hud-lcars
 ```
 
-That's the whole setup. Zero dependencies. Scans `~/.claude/`, generates a self-contained HTML dashboard, opens it in your browser. Done.
+Zero dependencies. Scans `~/.claude/`, generates a self-contained HTML dashboard, opens it in your browser.
 
 ## What you're looking at
 
@@ -34,9 +46,10 @@ Ten sections, each one clickable:
 - **Agents** with their descriptions and full prompt definitions
 - **Environment** variables you've set in settings.json, clickable to copy values
 - **Memory** files across all your projects, each one readable in full
-- **Tactical** an interactive canvas visualisation showing your entire setup as a Star Trek tactical display with force-directed graph, rotating scanner line, and clickable nodes
+- **Tactical** an interactive force-directed graph showing your entire setup as a Star Trek sensor display, plus a real 3D Enterprise-D model via Sketchfab
+- **Q** talk to Q from the Continuum. He'll roast your setup, call you "mon capitaine", and appear uninvited every few minutes
 - **Comms** scrollable log of all chat messages
-- **Config** model selector, voice engine, ElevenLabs setup, sound effects toggle
+- **Config** model selector (Haiku/Sonnet/Opus), voice engine, ElevenLabs setup, ship name, ship theme, sound effects
 
 Every row is clickable. The detail panel slides open on the right, renders the markdown properly with headers, tables, code blocks, lists, the works. JSON configs get syntax highlighted automatically with color-coded keys, strings, numbers, and booleans. It genuinely looks like you're reading a classified Starfleet briefing.
 
@@ -87,6 +100,38 @@ Two toggle buttons in the COMPUTER bar:
 
 All toggleable at any time. SFX is on by default, voice is off.
 
+## Star Trek features
+
+**Boot sequence** on every load. Starfleet logo, ship name, seven subsystems coming online with ascending beeps, progress bar, "ALL SYSTEMS NOMINAL".
+
+**Red Alert / Yellow Alert / Condition Green** based on system health. Offline MCP servers trigger RED ALERT with flashing red border and klaxon. Missing configs trigger YELLOW ALERT.
+
+**Ship naming.** Name your workstation in CONFIG. "USS Enterprise", "USS Defiant", whatever. Shows in the header bar and boot sequence.
+
+**Ship themes.** Four color palettes: Enterprise-D (classic TNG), Defiant (dark red/grey), Voyager (blue-shifted), Discovery (silver/blue). Instant CSS variable swap.
+
+**Bridge viewscreen.** The About tab has a warp-speed starfield canvas as the background. Content floats over the stars.
+
+**3D Enterprise-D.** The Tactical tab has an ENTERPRISE button that loads a real interactive 3D model via Sketchfab.
+
+**Q encounters.** Random chance every 2 minutes that Q appears with a quip. Red popup, snap sound, then he vanishes.
+
+## CLI options
+
+```
+Usage: claude-hud-lcars [options]
+
+Options:
+  --serve, -s    Start live server with chat, voice, and file editing
+  --no-open      Generate dashboard without opening in browser
+  --help, -h     Show help
+
+Environment:
+  ANTHROPIC_API_KEY    Required for chat (live mode)
+  ELEVENLABS_API_KEY   Optional premium voice
+  PORT                 Server port (default: 3200)
+```
+
 ## Configuration
 
 | Variable | Default | What it does |
@@ -135,9 +180,9 @@ All file operations are sandboxed to `~/.claude/` only. The server validates eve
 
 ```bash
 npm install -g claude-hud-lcars
+claude-hud-lcars          # static mode
+claude-hud-lcars --serve  # live mode
 ```
-
-Then run `claude-hud-lcars` for static mode or `claude-hud-lcars --serve` for live mode, from anywhere.
 
 ## What if I have nothing installed
 
