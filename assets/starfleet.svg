@@ -1,5 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" fill="#FF9900">
-  <path d="M100 10 L170 200 C140 180 120 170 100 160 C80 170 60 180 30 200 Z"/>
-  <ellipse cx="100" cy="100" rx="50" ry="30" fill="none" stroke="#FF9900" stroke-width="4" transform="rotate(-15, 100, 100)"/>
-  <circle cx="100" cy="90" r="8" fill="#000"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Outer dark ring -->
+  <circle cx="200" cy="200" r="198" fill="#1a2a3a" stroke="#2a6496" stroke-width="4"/>
+  <!-- Inner dark ring band -->
+  <circle cx="200" cy="200" r="190" fill="#111820"/>
+  <!-- Blue inner circle -->
+  <circle cx="200" cy="200" r="156" fill="#1e5a8a"/>
+
+  <!-- Delta arrowhead (main white shape) -->
+  <path d="M200 52 L280 290 L200 248 L120 290 Z" fill="#ffffff"/>
+
+  <!-- Orbital ring (white ellipse, tilted) -->
+  <ellipse cx="200" cy="188" rx="126" ry="52" fill="none" stroke="#ffffff" stroke-width="10" transform="rotate(-10 200 188)"/>
+
+  <!-- 4-pointed stars on the orbital ring -->
+  <!-- Top star -->
+  <path d="M200 130 L204 138 L212 138 L206 143 L208 152 L200 147 L192 152 L194 143 L188 138 L196 138 Z" fill="#fff"/>
+  <!-- Left star -->
+  <path d="M78 172 L82 180 L90 180 L84 185 L86 194 L78 189 L70 194 L72 185 L66 180 L74 180 Z" fill="#fff"/>
+  <!-- Right star -->
+  <path d="M322 172 L326 180 L334 180 L328 185 L330 194 L322 189 L314 194 L316 185 L310 180 L318 180 Z" fill="#fff"/>
+  <!-- Bottom-left star -->
+  <path d="M118 236 L122 244 L130 244 L124 249 L126 258 L118 253 L110 258 L112 249 L106 244 L114 244 Z" fill="#fff"/>
+
+  <!-- Small star inside delta -->
+  <path d="M200 198 L203 206 L212 206 L205 211 L208 220 L200 215 L192 220 L195 211 L188 206 L197 206 Z" fill="#1e5a8a"/>
+
+  <!-- Red swoosh -->
+  <path d="M98 218 Q150 170 210 188 Q260 200 300 210" fill="none" stroke="#cc2222" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Outer ring text (curved) -->
+  <defs>
+    <path id="topArc" d="M60,200 a140,140 0 0,1 280,0"/>
+    <path id="bottomArc" d="M56,210 a144,144 0 0,0 288,0"/>
+  </defs>
+  <text font-family="Arial Black, Arial, sans-serif" font-size="22" font-weight="900" fill="#1e5a8a" letter-spacing="8">
+    <textPath href="#topArc" startOffset="50%" text-anchor="middle">STARFLEET COMMAND</textPath>
+  </text>
+  <text font-family="Arial Black, Arial, sans-serif" font-size="19" font-weight="900" fill="#1e5a8a" letter-spacing="5">
+    <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">UNITED FEDERATION OF PLANETS</textPath>
+  </text>
 </svg>

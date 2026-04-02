@@ -165,6 +165,20 @@ function gen() {
       ]};
   });
 
+  plugins.forEach(p => {
+    D['p:'+p.id] = { t: p.id, tp: 'PLUGIN', m: p.on ? 'ACTIVE' : 'INACTIVE', b: JSON.stringify({ id: p.id, enabled: p.on }, null, 2),
+      actions: [
+        { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+      ]};
+  });
+  Object.entries(env).forEach(([k, v]) => {
+    D['v:'+k] = { t: k, tp: 'ENVIRONMENT VARIABLE', m: String(v), b: k + ' = ' + JSON.stringify(v, null, 2),
+      actions: [
+        { label: 'COPY VALUE', cmd: String(v), icon: 'COPY' },
+        { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+      ]};
+  });
+
   const sections = [
     { id: 'skills', label: 'SKILLS', color: '#9999FF', count: skills.length },
     { id: 'mcp', label: 'MCP SERVERS', color: '#FF9900', count: mcp.length },
@@ -173,8 +187,10 @@ function gen() {
     { id: 'agents', label: 'AGENTS', color: '#FFCC99', count: agents.length },
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
+    { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
     { id: 'config', label: 'CONFIG', color: '#FFCC66', count: null },
+    { id: 'about', label: 'ABOUT', color: '#55CC55', count: null },
   ];
 
 return `<!DOCTYPE html>
@@ -182,7 +198,7 @@ return `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CLAUDE-HUD // LCARS</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23000'/><path d='M16 3 L26 28 L16 22 L6 28 Z' fill='%23FF9900'/><circle cx='16' cy='14' r='2.5' fill='%23000'/><line x1='8' y1='20' x2='24' y2='20' stroke='%23000' stroke-width='1.5'/></svg>" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><circle cx='100' cy='100' r='98' fill='%231a2a3a' stroke='%232a6496' stroke-width='3'/><circle cx='100' cy='100' r='92' fill='%230d1218'/><circle cx='100' cy='100' r='78' fill='%231e5a8a'/><path d='M100 26 L140 145 L100 124 L60 145 Z' fill='%23fff'/><ellipse cx='100' cy='94' rx='63' ry='26' fill='none' stroke='%23fff' stroke-width='5' transform='rotate(-10 100 94)'/><path d='M49 109 Q75 85 105 94 Q130 100 150 105' fill='none' stroke='%23cc2222' stroke-width='7' stroke-linecap='round'/></svg>" type="image/svg+xml">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -208,7 +224,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 *{scrollbar-width:thin;scrollbar-color:var(--orange) #050506}
 
 /* ═══ LCARS LAYOUT ═══ */
-.lcars{display:grid;grid-template-columns:240px 1fr;grid-template-rows:72px 48px 1fr 40px;height:100vh;gap:4px;padding:0}
+.lcars{display:grid;grid-template-columns:240px 1fr;grid-template-rows:72px 48px 1fr 40px;height:100vh;column-gap:4px;row-gap:0;padding:0}
 
 /* ═══ SIDEBAR ═══ */
 .sb{grid-row:1/-1;grid-column:1;display:flex;flex-direction:column;gap:4px}
@@ -243,30 +259,31 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 /* ═══ TOP BAR ═══ */
 .tb{grid-column:2;display:flex;gap:4px}
+.tb{margin-bottom:4px}
 .tb-elbow{width:72px;background:var(--orange);border-radius:0 0 0 48px;flex-shrink:0}
 .tb-fill{flex:1;background:var(--orange);display:flex;align-items:center;justify-content:flex-end;padding:0 24px;gap:28px;
   font-family:'Antonio',sans-serif;font-size:0.95rem;letter-spacing:0.1em;color:rgba(0,0,0,0.4);text-transform:uppercase}
-.tb-a1{width:100px;background:var(--peach)}
+.tb-a1{width:100px;background:var(--peach);border-radius:0 0 12px 12px}
 .tb-a2{width:60px;background:var(--blue);border-radius:0 0 24px 0}
 
 /* ═══ STATS BAR ═══ */
-.stb{grid-column:2;display:flex;gap:4px}
-.stb-edge{width:72px;background:var(--blue);flex-shrink:0}
-.stb-inner{flex:1;display:flex;gap:2px;background:var(--faint)}
-.st{flex:1;background:#0a0a0c;padding:6px 12px;text-align:center}
-.st-n{font-family:'Antonio',sans-serif;font-size:1.6rem;font-weight:700;color:var(--orange);line-height:1}
+.stb{grid-column:2;display:flex;gap:0}
+.stb-edge{width:72px;background:var(--lavender);flex-shrink:0;border-radius:0 0 0 24px}
+.stb-inner{flex:1;display:flex;gap:3px;padding:3px 0 3px 4px;background:var(--lavender)}
+.st{flex:1;background:var(--bg);padding:5px 12px;text-align:center;border-radius:0}
+.stb-cap{width:80px;background:var(--tan);flex-shrink:0;border-radius:0 24px 24px 0}
+.st-n{font-family:'Antonio',sans-serif;font-size:1.5rem;font-weight:700;color:var(--orange);line-height:1}
 .st-l{font-size:0.55rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
 
 /* ═══ MAIN AREA ═══ */
-.mn{grid-column:2;display:flex;gap:4px;min-height:0;overflow:hidden}
-.mn-edge{width:72px;background:var(--blue);flex-shrink:0;border-radius:0;position:relative}
-.mn-edge::after{content:'';position:absolute;bottom:0;left:0;right:0;height:48px;background:var(--lavender);border-radius:48px 0 0 0}
+.mn{grid-column:2;display:flex;gap:0;min-height:0;overflow:hidden;margin-top:4px}
+.mn-edge{width:72px;background:var(--lavender);flex-shrink:0;position:relative;border-radius:0 24px 24px 0}
 
-.mn-content{flex:1;display:grid;grid-template-columns:1fr 0fr;transition:grid-template-columns 0.25s ease;min-height:0;overflow:hidden;gap:4px}
+.mn-content{flex:1;display:grid;grid-template-columns:1fr 0fr;transition:grid-template-columns 0.25s ease;min-height:0;overflow:hidden;gap:4px;margin-left:4px}
 .mn-content.open{grid-template-columns:1fr 1fr}
 
 /* ═══ LIST ═══ */
-.ls{background:#060608;overflow-y:auto;min-height:0}
+.ls{background:#060608;overflow-y:auto;min-height:0;border-radius:12px}
 
 .sec{display:none}
 .sec.on{display:block}
@@ -407,7 +424,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card-status-label.checking{color:var(--blue)}
 
 /* ═══ DETAIL PANEL (PADD) ═══ */
-.dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative}
+.dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative;border-radius:12px}
 .mn-content.open .dp{opacity:1}
 
 .dp-h{padding:16px 20px;border-bottom:2px solid #1a1a1e;position:sticky;top:0;background:#08080a;z-index:5}
@@ -638,6 +655,47 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .cfg-save-btn:hover{filter:brightness(1.2)}
 .cfg-note{font-size:0.75rem;color:var(--dim);line-height:1.6;margin-top:8px}
 
+/* ═══ ABOUT PANEL ═══ */
+.about{padding:32px;overflow-y:auto;max-width:800px}
+.about-hero{margin-bottom:32px}
+.about-title{
+  font-family:'Antonio',sans-serif;font-size:2.4rem;font-weight:700;
+  letter-spacing:0.08em;text-transform:uppercase;color:var(--orange);
+  line-height:1.1;margin-bottom:8px;
+}
+.about-tagline{
+  font-size:0.95rem;color:var(--text);line-height:1.7;margin-bottom:20px;
+}
+.about-section{margin-bottom:28px}
+.about-section-head{
+  font-family:'Antonio',sans-serif;font-size:1.1rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;
+  padding-bottom:6px;border-bottom:2px solid #1a1a1e;
+}
+.about-section-head.green{color:#55CC55}
+.about-section-head.blue{color:var(--blue)}
+.about-section-head.orange{color:var(--orange)}
+.about-section-head.salmon{color:var(--salmon)}
+.about-section-head.peach{color:var(--peach)}
+.about p{font-size:0.85rem;color:var(--text);line-height:1.8;margin-bottom:12px}
+.about a{color:var(--orange);text-decoration:none;border-bottom:1px solid rgba(255,153,0,0.3);transition:border-color 0.15s}
+.about a:hover{border-color:var(--orange)}
+.about-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.about-link{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 18px;background:#0a0a0c;border:1px solid #222;
+  font-family:'Antonio',sans-serif;font-size:0.85rem;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;color:var(--text);
+  text-decoration:none;transition:all 0.15s;border-radius:0 14px 14px 0;
+}
+.about-link:hover{border-color:var(--orange);color:var(--orange)}
+.about-link .al-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.about-bugs{
+  margin-top:24px;padding:14px 18px;background:#0a0a0c;border:1px solid #1a1a1e;
+  font-size:0.8rem;color:var(--dim);line-height:1.6;
+}
+.about-bugs a{color:var(--salmon)}
+
 /* ═══ GLOBAL COMPUTER BAR ═══ */
 .computer-bar{
   position:fixed;bottom:0;left:240px;right:0;z-index:50;
@@ -686,6 +744,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   position:fixed;bottom:45px;left:240px;right:0;
   max-height:40vh;overflow-y:auto;
   background:#08080aee;border-top:2px solid var(--orange);
+  border-radius:24px 24px 0 0;
   padding:16px 20px;z-index:49;
   display:none;font-size:0.88rem;line-height:1.7;color:var(--text);
   transition:max-height 0.2s ease;
@@ -814,6 +873,54 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .computer-response blockquote{border-left:3px solid var(--tan);padding-left:14px;color:var(--dim);margin:10px 0}
 .computer-response a{color:var(--orange);text-decoration:none}
 .computer-response a:hover{text-decoration:underline}
+/* LCARS scanning animation */
+.lcars-scan{
+  display:flex;flex-direction:column;align-items:center;padding:24px 0;gap:14px;
+}
+.lcars-scan-bars{
+  display:flex;gap:3px;align-items:center;height:40px;
+}
+.lcars-scan-bars .sb{
+  width:4px;border-radius:2px;animation:scan-bar 1.2s ease-in-out infinite;
+}
+.lcars-scan-bars .sb:nth-child(1){background:var(--orange);animation-delay:0s}
+.lcars-scan-bars .sb:nth-child(2){background:var(--peach);animation-delay:0.1s}
+.lcars-scan-bars .sb:nth-child(3){background:var(--blue);animation-delay:0.2s}
+.lcars-scan-bars .sb:nth-child(4){background:var(--lavender);animation-delay:0.3s}
+.lcars-scan-bars .sb:nth-child(5){background:var(--cyan);animation-delay:0.4s}
+.lcars-scan-bars .sb:nth-child(6){background:var(--orange);animation-delay:0.5s}
+.lcars-scan-bars .sb:nth-child(7){background:var(--peach);animation-delay:0.6s}
+.lcars-scan-bars .sb:nth-child(8){background:var(--blue);animation-delay:0.7s}
+.lcars-scan-bars .sb:nth-child(9){background:var(--lavender);animation-delay:0.8s}
+.lcars-scan-bars .sb:nth-child(10){background:var(--cyan);animation-delay:0.9s}
+.lcars-scan-bars .sb:nth-child(11){background:var(--orange);animation-delay:1.0s}
+.lcars-scan-bars .sb:nth-child(12){background:var(--peach);animation-delay:1.1s}
+.lcars-scan-line{
+  width:100%;height:2px;position:relative;overflow:hidden;border-radius:1px;
+  background:rgba(255,153,0,0.1);
+}
+.lcars-scan-line::after{
+  content:'';position:absolute;top:0;left:-30%;width:30%;height:100%;
+  background:linear-gradient(90deg,transparent,var(--orange),transparent);
+  animation:scan-sweep 1.8s ease-in-out infinite;
+}
+.lcars-scan-text{
+  font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--dim);
+  animation:scan-pulse 2s ease-in-out infinite;
+}
+@keyframes scan-bar{
+  0%,100%{height:4px;opacity:0.3}
+  50%{height:36px;opacity:1}
+}
+@keyframes scan-sweep{
+  0%{left:-30%}
+  100%{left:100%}
+}
+@keyframes scan-pulse{
+  0%,100%{opacity:0.4}
+  50%{opacity:1}
+}
 
 /* ═══ WAVEFORM VISUALIZER ═══ */
 .waveform{
@@ -855,11 +962,15 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 
 /* ═══ BOTTOM BAR ═══ */
-.bb{grid-column:2;display:flex;gap:4px}
-.bb-elbow{width:72px;background:var(--lavender);border-radius:48px 0 0 0;flex-shrink:0}
+.bb{grid-column:2;display:flex;gap:0;margin-top:4px}
+.bb-elbow{width:72px;background:var(--lavender);flex-shrink:0;position:relative}
+.bb-elbow::before{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+  background:var(--bg);border-radius:0 0 48px 0;
+}
 .bb-fill{flex:1;background:var(--lavender);display:flex;align-items:center;justify-content:space-between;padding:0 24px;
-  font-size:0.65rem;color:rgba(0,0,0,0.35);letter-spacing:0.06em}
-.bb-a{width:160px;background:var(--blue)}
+  font-size:0.65rem;color:rgba(0,0,0,0.35);letter-spacing:0.06em;border-radius:0 0 24px 0}
+.bb-a{width:160px;background:var(--blue);border-radius:24px 0 0 24px}
 
 @media(max-width:900px){
   .lcars{grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto}
@@ -875,8 +986,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <nav class="sb">
   <div class="sb-top">
     <div style="display:flex;align-items:center;gap:10px">
-      <svg viewBox="0 0 40 48" style="width:28px;height:34px;flex-shrink:0"><path d="M20 2 L34 44 L20 35 L6 44 Z" fill="#000" opacity="0.3"/><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="#000"/><circle cx="20" cy="18" r="3" fill="#FF9900" opacity="0.6"/></svg>
-      <h1 style="cursor:pointer" onclick="document.querySelector('.nb').click()">Claude<br>HUD</h1>
+      <svg viewBox="0 0 200 200" style="width:38px;height:38px;flex-shrink:0"><circle cx="100" cy="100" r="98" fill="#1a2a3a" stroke="#2a6496" stroke-width="3"/><circle cx="100" cy="100" r="92" fill="#0d1218"/><circle cx="100" cy="100" r="78" fill="#1e5a8a"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="#fff"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-10 100 94)"/><path d="M100 65 L102 69 L106 69 L103 72 L104 76 L100 74 L96 76 L97 72 L94 69 L98 69 Z" fill="#fff"/><path d="M39 86 L41 90 L45 90 L42 93 L43 97 L39 95 L35 97 L36 93 L33 90 L37 90 Z" fill="#fff"/><path d="M161 86 L163 90 L167 90 L164 93 L165 97 L161 95 L157 97 L158 93 L155 90 L159 90 Z" fill="#fff"/><path d="M59 118 L61 122 L65 122 L62 125 L63 129 L59 127 L55 129 L56 125 L53 122 L57 122 Z" fill="#fff"/><path d="M100 99 L102 103 L106 103 L103 106 L104 110 L100 108 L96 110 L97 106 L94 103 L98 103 Z" fill="#1e5a8a"/><path d="M49 109 Q75 85 105 94 Q130 100 150 105" fill="none" stroke="#cc2222" stroke-width="7" stroke-linecap="round"/></svg>
+      <h1 style="cursor:pointer;white-space:nowrap" onclick="document.querySelector('.nb').click()">Claude HUD</h1>
     </div>
     <small>LCARS INTERFACE // ${stardate}</small>
   </div>
@@ -899,7 +1010,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
     <span>MODEL: ${esc(S?.model||'DEFAULT')}</span>
     <span>ASSETS: ${String(skills.length+agents.length+mcp.length+hooks.length+plugins.length).padStart(3,'0')}</span>
     <span>SESSIONS: ${String(sessions).padStart(5,'0')}</span>
-    <span style="display:flex;align-items:center;gap:6px"><svg viewBox="0 0 40 48" style="width:12px;height:15px"><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="rgba(0,0,0,0.35)"/></svg>STARDATE ${stardate}</span>
+    <span style="display:flex;align-items:center;gap:6px"><svg viewBox="0 0 200 200" style="width:16px;height:16px"><circle cx="100" cy="100" r="98" fill="rgba(0,0,0,0.15)"/><circle cx="100" cy="100" r="78" fill="rgba(0,0,0,0.1)"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="rgba(0,0,0,0.25)"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="5" transform="rotate(-10 100 94)"/></svg>STARDATE ${stardate}</span>
   </div>
   <div class="tb-a1"></div>
   <div class="tb-a2"></div>
@@ -910,6 +1021,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="stb-inner">
     ${sections.filter(s => s.count !== null).map(s => `<div class="st"><div class="st-n">${String(s.count).padStart(3,'0')}</div><div class="st-l">${s.label}</div></div>`).join('\n    ')}
   </div>
+  <div class="stb-cap"></div>
 </div>
 
 <div class="mn">
@@ -990,7 +1102,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       <div class="sec" id="s-plugins">
         <div class="sec-h">Plugin Manifest</div>
         ${plugins.length===0?'<div class="emp">No plugins loaded</div>':plugins.map(p=>`
-        <div class="r r2">
+        <div class="r r2" onclick="open_('p:${esc(p.id)}')" data-k="p:${esc(p.id)}">
           <span class="r-id">${esc(p.id)}</span>
           <span class="tg ${p.on?'tg-g':'tg-r'}">${p.on?'ACTIVE':'INACTIVE'}</span>
         </div>`).join('')}
@@ -1016,7 +1128,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       <div class="sec" id="s-env">
         <div class="sec-h">Environment Variables</div>
         ${Object.keys(env).length===0?'<div class="emp">No env overrides</div>':Object.entries(env).map(([k,v])=>`
-        <div class="r r2">
+        <div class="r r2" onclick="open_('v:${esc(k)}')" data-k="v:${esc(k)}">
           <span class="r-id">${esc(k)}</span>
           <span class="r-d" style="color:var(--orange)">${esc(String(v))}</span>
         </div>`).join('')}
@@ -1030,6 +1142,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-tg"><span class="tg tg-b">${esc(m.type)}</span></span>
           <span class="r-d">${esc(m.proj)}</span>
         </div>`).join('')}
+      </div>
+
+      <div class="sec" id="s-viz">
+        <canvas id="viz-canvas" style="width:100%;height:100%;display:block;background:#030306;border-radius:12px"></canvas>
       </div>
 
       <div class="sec" id="s-comms">
@@ -1102,19 +1218,19 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-desc">Which Claude model the COMPUTER bar talks to.</span>
                 <span class="cfg-input">
                   <div class="lcars-select" id="cfg-model-wrap">
-                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-model-wrap')"><span>${esc(S?.model || 'claude-sonnet-4-6')}</span></button>
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-model-wrap')"><span>Claude Haiku 4.5</span></button>
                     <div class="lcars-dropdown">
-                      <div class="lcars-option${(S?.model||'').includes('opus')||!(S?.model)?' selected':''}" data-value="claude-opus-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                      <div class="lcars-option" data-value="claude-opus-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Opus 4.6</span>
                         <span class="opt-sub">Most capable. Deep reasoning, complex tasks.</span>
                       </div>
-                      <div class="lcars-option${(S?.model||'').includes('sonnet')?' selected':''}" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                      <div class="lcars-option" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Sonnet 4.6</span>
                         <span class="opt-sub">Fast and capable. Best balance of speed and quality.</span>
                       </div>
-                      <div class="lcars-option" data-value="claude-haiku-4-5" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                      <div class="lcars-option selected" data-value="claude-haiku-4-5-20251001" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
                         <span class="opt-label">Claude Haiku 4.5</span>
-                        <span class="opt-sub">Fastest. Quick answers, lower cost.</span>
+                        <span class="opt-sub">Fastest. Instant responses, lowest cost.</span>
                       </div>
                     </div>
                   </div>
@@ -1161,6 +1277,71 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-input" style="color:var(--orange)">${stardate}</span>
               </div>
             </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="sec" id="s-about">
+        <div class="about">
+          <div class="about-hero">
+            <div style="text-align:center;margin-bottom:24px">
+              <svg viewBox="0 0 200 200" style="width:120px;height:120px"><circle cx="100" cy="100" r="98" fill="#1a2a3a" stroke="#2a6496" stroke-width="3"/><circle cx="100" cy="100" r="92" fill="#0d1218"/><circle cx="100" cy="100" r="78" fill="#1e5a8a"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="#fff"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-10 100 94)"/><path d="M100 65 L102 69 L106 69 L103 72 L104 76 L100 74 L96 76 L97 72 L94 69 L98 69 Z" fill="#fff"/><path d="M39 86 L41 90 L45 90 L42 93 L43 97 L39 95 L35 97 L36 93 L33 90 L37 90 Z" fill="#fff"/><path d="M161 86 L163 90 L167 90 L164 93 L165 97 L161 95 L157 97 L158 93 L155 90 L159 90 Z" fill="#fff"/><path d="M59 118 L61 122 L65 122 L62 125 L63 129 L59 127 L55 129 L56 125 L53 122 L57 122 Z" fill="#fff"/><path d="M100 99 L102 103 L106 103 L103 106 L104 110 L100 108 L96 110 L97 106 L94 103 L98 103 Z" fill="#1e5a8a"/><path d="M49 109 Q75 85 105 94 Q130 100 150 105" fill="none" stroke="#cc2222" stroke-width="7" stroke-linecap="round"/></svg>
+            </div>
+            <div class="about-title">Claude HUD // LCARS</div>
+            <div class="about-tagline">
+              A Star Trek LCARS operations dashboard for Claude Code. See your entire setup in one place. Browse skills, agents, MCP servers, hooks, memory files, and environment variables. Edit them in-browser. Talk to the computer. It talks back.
+            </div>
+            <p style="font-size:0.85rem;color:var(--dim);line-height:1.7">
+              One command. Zero dependencies. No build step. No frameworks. Just Node.js and your browser. Run <span style="color:var(--orange);font-family:'JetBrains Mono',monospace">npx claude-hud-lcars</span> and you're in.
+            </p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head orange">Why this exists</div>
+            <p>
+              Claude Code is powerful, but your setup is scattered across dozens of files and configs under <span style="color:var(--blue);font-family:'JetBrains Mono',monospace">~/.claude/</span>. Skills in one folder, hooks in a JSON file, MCP servers configured somewhere else, memory files buried in project directories. It adds up fast.
+            </p>
+            <p>
+              This dashboard pulls it all into one screen so you can actually see what you've built. Not a management tool that tries to replace your terminal. Just a window into the system, with enough interaction to be useful.
+            </p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head blue">The Star Trek thing</div>
+            <p>
+              Look, some people collect stamps. I grew up watching TNG and always thought the LCARS interface was the best UI ever designed for a computer. Flat, information-dense, colour-coded, no wasted space. It turns out those principles are exactly what you want for a dashboard that shows you 200 config items at a glance.
+            </p>
+            <p>
+              The colour palette is accurate to the show. The typography is Swiss 911 (via Antonio). The sound effects are synthesised from scratch, no audio files. The computer bar at the bottom responds like the Enterprise computer, because if you're going to build a Star Trek dashboard, you don't do it halfway.
+            </p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head green">Built by</div>
+            <p>
+              I'm <strong style="color:var(--text)">Andr\u00e9 Figueira</strong>, founder of <a href="https://polyxmedia.com" target="_blank">Polyxmedia</a>. I've been building software for about 20 years, currently Principal Engineer by day, building tools and products under Polyxmedia the rest of the time.
+            </p>
+            <p>
+              Polyxmedia is a boutique tech consultancy and the home for everything I ship. Some of it's client work, some of it's products I build because I can't stop thinking about a problem until it has a solution. This dashboard started that way. I wanted to see my Claude Code setup. Now you can see yours.
+            </p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head peach">Open source</div>
+            <p>
+              This project is free and open source. Use it, fork it, make it weird. If you build something cool on top of it, I'd genuinely love to see it.
+            </p>
+          </div>
+
+          <div class="about-links">
+            <a class="about-link" href="https://polyxmedia.com" target="_blank"><span class="al-dot" style="background:#55CC55"></span> polyxmedia.com</a>
+            <a class="about-link" href="https://twitter.com/voidmode" target="_blank"><span class="al-dot" style="background:var(--blue)"></span> @voidmode</a>
+            <a class="about-link" href="https://github.com/polyxmedia/claude-hud-lcars" target="_blank"><span class="al-dot" style="background:var(--orange)"></span> GitHub</a>
+          </div>
+
+          <div class="about-bugs">
+            Found a bug? Something broken? Feature request? Email <a href="mailto:hello@polyxmedia.com">hello@polyxmedia.com</a> and I'll look at it.
           </div>
 
         </div>
@@ -1213,7 +1394,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 <div class="computer-bar">
-  <div class="computer-bar-label"><svg viewBox="0 0 40 48" style="width:14px;height:17px;margin-right:6px"><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="#000" opacity="0.4"/></svg>COMPUTER</div>
+  <div class="computer-bar-label"><svg viewBox="0 0 200 200" style="width:18px;height:18px;margin-right:6px"><circle cx="100" cy="100" r="98" fill="rgba(0,0,0,0.2)"/><circle cx="100" cy="100" r="78" fill="rgba(0,0,0,0.12)"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="rgba(0,0,0,0.3)"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="5" transform="rotate(-10 100 94)"/></svg>COMPUTER</div>
   <div class="computer-bar-input">
     <textarea id="cb-in" placeholder="Ask the computer anything..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobal()}"></textarea>
   </div>
@@ -1232,6 +1413,15 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 <script>
 const D=${escJ(D)};
+const VIZ=${JSON.stringify({
+  skills: skills.map(s => ({ name: s.name, ver: s.ver, ctx: s.ctx })),
+  agents: agents.map(a => ({ name: a.name })),
+  mcp: mcp.map(m => ({ name: m.name, cmd: m.cmd })),
+  hooks: hooks.map(h => ({ ev: h.ev, matcher: h.matcher, type: h.type })),
+  plugins: plugins.map(p => ({ id: p.id, on: p.on })),
+  env: Object.keys(env),
+  mem: mem.map(m => ({ name: m.name, proj: m.proj, type: m.type })),
+})};
 
 function nav(id,el){
   document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('on')});
@@ -1240,8 +1430,8 @@ function nav(id,el){
   el.classList.add('act');
   close_();
   try{localStorage.setItem('hud-tab',id)}catch(e){}
-  // In comms mode, hide the detail panel column entirely
-  if (id === 'comms') {
+  // In comms/about mode, hide the detail panel column entirely
+  if (id === 'comms' || id === 'about') {
     document.getElementById('mc').classList.remove('open');
     document.getElementById('dp').style.display = 'none';
   } else {
@@ -1588,11 +1778,12 @@ function startMic() {
   showWaveform('listening');
   beepAction();
 
-  // Show live transcription overlay
-  var cr = document.getElementById('cr');
-  var crBody = document.getElementById('cr-body');
-  crBody.innerHTML = '<span style="color:var(--salmon);font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.12em;text-transform:uppercase">VOICE INPUT ACTIVE</span><p id="live-transcript" style="color:var(--text);margin-top:10px;font-size:1rem;line-height:1.6;min-height:2em"></p>';
-  cr.classList.add('visible');
+  // Show listening indicator in the waveform label, don't touch the response panel
+  var wfLabel = document.getElementById('wf-label');
+  if (wfLabel) {
+    wfLabel.textContent = 'LISTENING';
+    wfLabel.classList.remove('hidden');
+  }
 
   var input = document.getElementById('cb-in');
   var finalTranscript = '';
@@ -1631,11 +1822,6 @@ function startMic() {
     }
 
     input.value = fullText;
-    // Update live transcription display
-    var liveEl = document.getElementById('live-transcript');
-    if (liveEl) {
-      liveEl.innerHTML = esc(finalTranscript) + '<span style="color:var(--dim)">' + esc(interim) + '</span>';
-    }
   };
 
   recognition.onend = function() {
@@ -1661,7 +1847,8 @@ function startMic() {
   recognition.onerror = function(e) {
     micActive = false;
     hideWaveform();
-    cr.classList.remove('visible');
+    var vb = document.getElementById('voice-toggle');
+    if (vb) vb.style.animation = '';
     if (e.error !== 'no-speech') {
       toast('Mic error: ' + e.error);
     }
@@ -1943,6 +2130,12 @@ speak = function(text) {
 
   _origSpeakForLoop(text);
 
+  // Safety: clear computerSpeaking after 30s max
+  var speechSafety = setTimeout(function() {
+    computerSpeaking = false;
+    lastSpokenText = '';
+  }, 30000);
+
   // Poll for speech end (works for both browser TTS and ElevenLabs)
   // Wait at least 1s before checking, so async audio has time to start
   var checkDone = setInterval(function() {
@@ -1953,6 +2146,7 @@ speak = function(text) {
     var elevenPlaying = currentAudio && !currentAudio.paused && !currentAudio.ended;
     if (!browserSpeaking && !elevenPlaying) {
       clearInterval(checkDone);
+      clearTimeout(speechSafety);
       computerSpeaking = false;
       lastSpokenText = '';
       // Wait 2s after speech ends to let echo fully dissipate
@@ -1997,16 +2191,15 @@ function sendClaude(text) {
 
   var cr = document.getElementById('cr');
   var crBody = document.getElementById('cr-body');
-  crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">COMMAND</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div><div id="claude-stream"><span style="color:var(--green);font-size:0.7rem;letter-spacing:0.1em">CLAUDE CODE EXECUTING...</span></div>';
+  crBody.innerHTML = lcarsScanHTML();
   cr.classList.add('visible');
 
   var btn = document.getElementById('cb-send');
   btn.disabled = true;
   btn.textContent = '...';
 
-  var streamDiv = null;
   var fullText = '';
-  var toolsUsed = [];
+  var streamStarted = false;
 
   fetch('/api/claude', {
     method: 'POST',
@@ -2028,17 +2221,6 @@ function sendClaude(text) {
           btn.textContent = 'SEND';
           beepReceive();
           showLogButton();
-          // Render final output
-          var output = '';
-          if (toolsUsed.length) {
-            output += '<div style="margin-bottom:12px"><span style="font-size:0.65rem;color:var(--tan);letter-spacing:0.1em;text-transform:uppercase">TOOLS USED</span>';
-            toolsUsed.forEach(function(t) {
-              output += '<div style="font-size:0.78rem;color:var(--dim);padding:2px 0">' + esc(t) + '</div>';
-            });
-            output += '</div>';
-          }
-          output += md(fullText);
-          crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">COMMAND</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div>' + output;
           addMsg('ai', fullText);
           speak(fullText);
           return;
@@ -2056,24 +2238,21 @@ function sendClaude(text) {
               var evt = JSON.parse(data);
               if (evt.type === 'text') {
                 fullText += evt.text;
-                if (!streamDiv) {
-                  streamDiv = document.getElementById('claude-stream');
+                if (!streamStarted) {
+                  streamStarted = true;
+                  crBody.innerHTML = '<div id="cr-stream"></div>';
                 }
-                if (streamDiv) {
-                  streamDiv.innerHTML = '<span style="font-size:0.65rem;color:var(--green);letter-spacing:0.1em;text-transform:uppercase">CLAUDE CODE OUTPUT</span>' + md(fullText);
+                var streamEl = document.getElementById('cr-stream');
+                if (streamEl) {
+                  streamEl.innerHTML = md(fullText);
                   cr.scrollTop = cr.scrollHeight;
                 }
               } else if (evt.type === 'tool') {
-                toolsUsed.push(evt.name + '(' + JSON.stringify(evt.input).slice(0, 60) + ')');
-                if (streamDiv) {
-                  streamDiv.innerHTML = '<span style="font-size:0.65rem;color:var(--tan);letter-spacing:0.1em;text-transform:uppercase">EXECUTING: ' + esc(evt.name) + '</span>' + md(fullText);
-                }
+                // Silently track, don't show execution details
               } else if (evt.type === 'status') {
-                // Show status updates
-                if (streamDiv) {
-                  var statusHtml = '<div style="font-size:0.72rem;color:var(--dim);margin-bottom:4px">' + esc(evt.text) + '</div>';
-                  streamDiv.insertAdjacentHTML('afterbegin', statusHtml);
-                }
+                // Update scan text if still showing
+                var scanText = document.querySelector('.lcars-scan-text');
+                if (scanText) scanText.textContent = evt.text;
               }
             } catch(e) {}
           }
@@ -2084,8 +2263,8 @@ function sendClaude(text) {
 
     return pump();
   }).catch(function(e) {
-    crBody.innerHTML += '<div style="color:var(--red);margin-top:10px">ERROR: ' + esc(e.message) + '</div>';
-    addMsg('err', 'CLAUDE CODE ERROR: ' + e.message);
+    crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
+    addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'SEND';
   });
@@ -2193,7 +2372,7 @@ function saveConfig() {
     elevenKey: document.getElementById('cfg-eleven-key').value,
     elevenVoice: document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL',
     sfx: getLcarsValue('cfg-sfx-wrap'),
-    model: getLcarsValue('cfg-model-wrap') || 'claude-sonnet-4-6',
+    model: getLcarsValue('cfg-model-wrap') || 'claude-haiku-4-5-20251001',
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
 }
@@ -2686,6 +2865,17 @@ function isClaudeMode() {
   return isToggleOn('mode-toggle');
 }
 
+// ═══ LCARS SCAN ANIMATION ═══
+function lcarsScanHTML() {
+  var bars = '';
+  for (var i = 0; i < 12; i++) bars += '<div class="sb"></div>';
+  return '<div class="lcars-scan">' +
+    '<div class="lcars-scan-bars">' + bars + '</div>' +
+    '<div class="lcars-scan-line"></div>' +
+    '<div class="lcars-scan-text">Analysing query</div>' +
+    '</div>';
+}
+
 // ═══ GLOBAL COMPUTER CHAT ═══
 var chatHistory = [];
 
@@ -2758,11 +2948,11 @@ function sendGlobal() {
   addMsg('user', text);
   chatHistory.push({ role: 'user', content: text });
 
-  // Show response overlay (expand if minimised)
+  // Show response overlay with scan animation
   var cr = document.getElementById('cr');
   var crBody = document.getElementById('cr-body');
   cr.classList.remove('minimised');
-  crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">YOU</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div><span style="color:var(--dim)">Processing...</span>';
+  crBody.innerHTML = lcarsScanHTML();
   cr.classList.add('visible');
 
   var btn = document.getElementById('cb-send');
@@ -2776,11 +2966,13 @@ function sendGlobal() {
   }, 60000);
 
   var fullText = '';
+  var streamStarted = false;
+  var activeBlockIdx = -1;
 
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL }),
+    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001' }),
   }).then(function(res) {
     if (!res.ok) {
       return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
@@ -2798,9 +2990,9 @@ function sendGlobal() {
           btn.disabled = false;
           btn.textContent = 'SEND';
           beepReceive();
-          speak(fullText);
           addMsg('ai', fullText);
           showLogButton();
+          speak(fullText);
           return;
         }
         buffer += decoder.decode(result.value, { stream: true });
@@ -2813,10 +3005,24 @@ function sendGlobal() {
             if (data === '[DONE]') continue;
             try {
               var evt = JSON.parse(data);
-              if (evt.type === 'content_block_delta' && evt.delta && evt.delta.text) {
+              if (evt.type === 'message_stop' || evt.type === 'message_start') continue;
+              // Track which content block we're in - only accept text from the first one
+              if (evt.type === 'content_block_start') {
+                if (activeBlockIdx === -1) activeBlockIdx = evt.index;
+                continue;
+              }
+              if (evt.type === 'content_block_stop') continue;
+              if (evt.type === 'content_block_delta' && evt.index === activeBlockIdx && evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
                 fullText += evt.delta.text;
-                crBody.innerHTML = md(fullText);
-                cr.scrollTop = cr.scrollHeight;
+                if (!streamStarted) {
+                  streamStarted = true;
+                  crBody.innerHTML = '<div id="cr-stream"></div>';
+                }
+                var streamEl = document.getElementById('cr-stream');
+                if (streamEl) {
+                  streamEl.innerHTML = md(fullText);
+                  cr.scrollTop = cr.scrollHeight;
+                }
               }
             } catch(e) {}
           }
@@ -2834,6 +3040,321 @@ function sendGlobal() {
     btn.textContent = 'SEND';
   });
 }
+
+// ═══ TACTICAL VISUALISATION ═══
+(function() {
+  var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null;
+  var COLORS = {
+    skills: '#9999FF', mcp: '#FF9900', hooks: '#CC9966',
+    plugins: '#CC99CC', agents: '#FFCC99', env: '#66CCCC',
+    memory: '#9999CC', core: '#FF9900'
+  };
+  var LABELS = {
+    skills: 'SKILL', mcp: 'MCP', hooks: 'HOOK',
+    plugins: 'PLUGIN', agents: 'AGENT', env: 'ENV',
+    memory: 'MEMORY', core: 'CORE'
+  };
+
+  function buildGraph() {
+    nodes = []; edges = [];
+    // Central core node
+    nodes.push({ id: 'core', label: 'LCARS CORE', group: 'core', r: 28, x: 0, y: 0, vx: 0, vy: 0, fixed: true });
+
+    // Category hub nodes
+    var categories = ['skills','mcp','hooks','plugins','agents','env','memory'];
+    var catNodes = {};
+    categories.forEach(function(cat, i) {
+      var count = cat === 'env' ? VIZ.env.length : (VIZ[cat] || []).length;
+      if (count === 0) return;
+      var angle = (i / categories.length) * Math.PI * 2 - Math.PI/2;
+      var hubR = Math.min(W, H) * 0.28;
+      var id = 'hub:' + cat;
+      catNodes[cat] = id;
+      nodes.push({
+        id: id, label: cat.toUpperCase() + ' (' + count + ')',
+        group: cat, r: 18, x: Math.cos(angle) * hubR, y: Math.sin(angle) * hubR,
+        vx: 0, vy: 0, fixed: false, isHub: true
+      });
+      edges.push({ from: 'core', to: id, color: COLORS[cat] });
+    });
+
+    // Individual nodes orbiting their hub
+    function addItems(cat, items, labelFn) {
+      if (!catNodes[cat]) return;
+      var hubId = catNodes[cat];
+      var hub = nodes.find(function(n) { return n.id === hubId; });
+      items.forEach(function(item, i) {
+        var angle = (i / items.length) * Math.PI * 2;
+        var orbitR = 60 + items.length * 4;
+        var id = cat + ':' + i;
+        nodes.push({
+          id: id, label: labelFn(item), group: cat, r: 8,
+          x: hub.x + Math.cos(angle) * orbitR,
+          y: hub.y + Math.sin(angle) * orbitR,
+          vx: 0, vy: 0, fixed: false, detail: item
+        });
+        edges.push({ from: hubId, to: id, color: COLORS[cat] });
+      });
+    }
+
+    addItems('skills', VIZ.skills, function(s) { return s.name; });
+    addItems('mcp', VIZ.mcp, function(m) { return m.name; });
+    addItems('hooks', VIZ.hooks, function(h) { return h.ev; });
+    addItems('plugins', VIZ.plugins, function(p) { return p.id.split('/').pop(); });
+    addItems('agents', VIZ.agents, function(a) { return a.name; });
+    addItems('env', VIZ.env.map(function(k) { return { name: k }; }), function(e) { return e.name; });
+    addItems('memory', VIZ.mem, function(m) { return m.name || m.proj; });
+
+    // Cross-connections: hooks that reference skill events
+    VIZ.hooks.forEach(function(h, hi) {
+      if (h.ev.includes('Tool') || h.ev.includes('Notification')) {
+        VIZ.mcp.forEach(function(m, mi) {
+          if (catNodes.mcp) edges.push({ from: 'hooks:' + hi, to: 'mcp:' + mi, color: 'rgba(204,153,102,0.15)', dashed: true });
+        });
+      }
+    });
+  }
+
+  function simulate() {
+    // Simple force simulation
+    var k = 0.003, repulse = 8000, damp = 0.85, center = 0.01;
+    nodes.forEach(function(a) {
+      if (a.fixed) return;
+      // Repulsion between all nodes
+      nodes.forEach(function(b) {
+        if (a === b) return;
+        var dx = a.x - b.x, dy = a.y - b.y;
+        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        var f = repulse / (dist * dist);
+        a.vx += (dx / dist) * f;
+        a.vy += (dy / dist) * f;
+      });
+      // Center gravity
+      a.vx -= a.x * center;
+      a.vy -= a.y * center;
+    });
+    // Spring attraction along edges
+    edges.forEach(function(e) {
+      var a = nodes.find(function(n) { return n.id === e.from; });
+      var b = nodes.find(function(n) { return n.id === e.to; });
+      if (!a || !b) return;
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      var target = e.dashed ? 200 : (a.isHub || b.isHub ? 140 : 80);
+      var f = (dist - target) * k;
+      if (!a.fixed) { a.vx += (dx / dist) * f; a.vy += (dy / dist) * f; }
+      if (!b.fixed) { b.vx -= (dx / dist) * f; b.vy -= (dy / dist) * f; }
+    });
+    // Apply velocity
+    nodes.forEach(function(n) {
+      if (n.fixed) return;
+      n.vx *= damp; n.vy *= damp;
+      n.x += n.vx; n.y += n.vy;
+    });
+  }
+
+  var time = 0;
+  function draw() {
+    time += 0.008;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W/2, H/2);
+
+    // Grid rings (tactical scanner look)
+    [0.15, 0.3, 0.5, 0.75].forEach(function(pct) {
+      var r = Math.min(W, H) * pct;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(153,153,255,0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+    // Cross hairs
+    ctx.strokeStyle = 'rgba(153,153,255,0.04)';
+    ctx.beginPath(); ctx.moveTo(-W/2, 0); ctx.lineTo(W/2, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -H/2); ctx.lineTo(0, H/2); ctx.stroke();
+
+    // Rotating scan line
+    var scanAngle = time * 0.5;
+    var scanR = Math.min(W, H) * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(scanAngle) * scanR, Math.sin(scanAngle) * scanR);
+    var grad = ctx.createLinearGradient(0, 0, Math.cos(scanAngle) * scanR, Math.sin(scanAngle) * scanR);
+    grad.addColorStop(0, 'rgba(255,153,0,0.3)');
+    grad.addColorStop(1, 'rgba(255,153,0,0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw edges
+    edges.forEach(function(e) {
+      var a = nodes.find(function(n) { return n.id === e.from; });
+      var b = nodes.find(function(n) { return n.id === e.to; });
+      if (!a || !b) return;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      if (e.dashed) {
+        ctx.setLineDash([4, 8]);
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 0.5;
+      } else {
+        ctx.setLineDash([]);
+        // Pulse glow on main edges
+        var pulse = 0.3 + Math.sin(time * 2 + a.x * 0.01) * 0.15;
+        ctx.strokeStyle = e.color.replace(')', ',' + pulse + ')').replace('rgb', 'rgba');
+        if (ctx.strokeStyle === e.color) ctx.globalAlpha = pulse;
+        ctx.lineWidth = a.isHub || b.isHub ? 1.5 : 1;
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    });
+
+    // Draw nodes
+    hoveredNode = null;
+    nodes.forEach(function(n) {
+      // Hit test
+      var sx = n.x, sy = n.y;
+      var dx = mouseX - W/2 - sx, dy = mouseY - H/2 - sy;
+      var isHover = Math.sqrt(dx*dx + dy*dy) < n.r + 6;
+      if (isHover) hoveredNode = n;
+
+      // Glow
+      if (n.group === 'core' || n.isHub) {
+        var glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2.5);
+        glow.addColorStop(0, (COLORS[n.group] || '#FF9900') + '30');
+        glow.addColorStop(1, 'transparent');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Node circle
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      var col = COLORS[n.group] || '#888';
+      ctx.fillStyle = isHover ? '#fff' : col;
+      ctx.fill();
+      if (isHover || n.isHub || n.group === 'core') {
+        ctx.strokeStyle = isHover ? '#fff' : col;
+        ctx.lineWidth = isHover ? 2.5 : 1.5;
+        ctx.stroke();
+      }
+
+      // Label
+      if (n.group === 'core' || n.isHub || isHover) {
+        ctx.font = (n.group === 'core' ? '600 13px' : isHover ? '600 11px' : '600 10px') + " 'Antonio', sans-serif";
+        ctx.fillStyle = isHover ? '#fff' : (n.group === 'core' ? '#000' : col);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = n.group === 'core' ? 'middle' : 'top';
+        var ly = n.group === 'core' ? n.y : n.y + n.r + 5;
+        ctx.fillText(n.label.length > 20 ? n.label.slice(0, 18) + '..' : n.label, n.x, ly);
+      }
+    });
+
+    // Tooltip for hovered node
+    if (hoveredNode && !hoveredNode.isHub && hoveredNode.group !== 'core') {
+      var tx = hoveredNode.x + W/2 + 16, ty = hoveredNode.y + H/2 - 10;
+      if (tx + 180 > W) tx = hoveredNode.x + W/2 - 196;
+      ctx.restore();
+      ctx.font = "600 11px 'Antonio', sans-serif";
+      ctx.fillStyle = '#08080aee';
+      ctx.fillRect(tx - 8, ty - 4, 180, 42);
+      ctx.strokeStyle = COLORS[hoveredNode.group];
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx - 8, ty - 4, 180, 42);
+      ctx.fillStyle = COLORS[hoveredNode.group];
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(LABELS[hoveredNode.group] || '', tx, ty);
+      ctx.fillStyle = '#ddd';
+      ctx.font = "11px 'JetBrains Mono', monospace";
+      ctx.fillText(hoveredNode.label.length > 22 ? hoveredNode.label.slice(0,20)+'..' : hoveredNode.label, tx, ty + 18);
+    } else {
+      ctx.restore();
+    }
+
+    // Stats overlay top-right
+    ctx.font = "600 11px 'Antonio', sans-serif";
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(153,153,255,0.4)';
+    ctx.fillText('TACTICAL OVERVIEW // ' + nodes.length + ' SUBSYSTEMS', W - 16, 16);
+    ctx.fillStyle = 'rgba(255,153,0,0.3)';
+    ctx.fillText('STARDATE ' + new Date().toISOString().slice(0,10).replace(/-/g,'.'), W - 16, 32);
+  }
+
+  function tick() {
+    simulate();
+    draw();
+    animFrame = requestAnimationFrame(tick);
+  }
+
+  function initViz() {
+    canvas = document.getElementById('viz-canvas');
+    if (!canvas) return;
+    var sec = document.getElementById('s-viz');
+
+    function resize() {
+      var rect = sec.getBoundingClientRect();
+      W = rect.width; H = rect.height;
+      canvas.width = W * devicePixelRatio;
+      canvas.height = H * devicePixelRatio;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx = canvas.getContext('2d');
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    canvas.addEventListener('mousemove', function(e) {
+      var rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mouseleave', function() { mouseX = mouseY = -1; });
+    canvas.addEventListener('click', function() {
+      if (hoveredNode && hoveredNode.group !== 'core' && !hoveredNode.isHub) {
+        var key = hoveredNode.id.replace(/^(skills|mcp|hooks|plugins|agents|env|memory):/, function(m, g) {
+          var prefixes = { skills:'s', mcp:'m', hooks:'h', plugins:'p', agents:'a', env:'v', memory:'e' };
+          return (prefixes[g] || g) + ':';
+        });
+        // Try to find the matching data key
+        var item = hoveredNode.detail;
+        if (hoveredNode.group === 'skills' && item) open_('s:' + item.name);
+        else if (hoveredNode.group === 'agents' && item) open_('a:' + item.name);
+        else if (hoveredNode.group === 'mcp' && item) open_('m:' + item.name);
+        else if (hoveredNode.group === 'hooks') { var idx = hoveredNode.id.split(':')[1]; open_('h:' + idx); }
+        else if (hoveredNode.group === 'plugins' && item) open_('p:' + item.id);
+        else if (hoveredNode.group === 'env' && item) open_('v:' + item.name);
+        else if (hoveredNode.group === 'memory' && item) {
+          var memKey = VIZ.mem.findIndex(function(m) { return m.name === item.name && m.proj === item.proj; });
+          if (memKey >= 0) open_('e:' + VIZ.mem[memKey].name);
+        }
+        beepOpen();
+      }
+    });
+
+    buildGraph();
+    tick();
+  }
+
+  // Start when tab is shown, pause when hidden
+  var _origNavViz = nav;
+  nav = function(id, el) {
+    _origNavViz(id, el);
+    if (id === 'viz') {
+      if (!canvas) initViz();
+      else if (!animFrame) tick();
+    } else {
+      if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    }
+  };
+})();
 </script>
 </body></html>`;
 }

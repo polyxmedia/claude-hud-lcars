@@ -25,15 +25,18 @@ That's the whole setup. Zero dependencies. Scans `~/.claude/`, generates a self-
 
 The dashboard reads everything Claude Code knows about your setup and presents it in an LCARS interface with the authentic TNG color palette, the signature rounded elbows connecting sections, colored navigation bars, and the Antonio typeface standing in for Swiss 911.
 
-Seven sections, each one clickable:
+Ten sections, each one clickable:
 
 - **Skills** with version, execution context (fork/inline), and the full SKILL.md rendered with syntax highlighting when you click through
 - **MCP Servers** showing every configured server, its command, args, and the complete JSON config on drill-down (env vars auto-redacted, your secrets stay secret)
 - **Hooks** with event type, matcher pattern, hook type, and the full hook definition viewable in the detail panel
-- **Plugins** and their active/inactive status
+- **Plugins** and their active/inactive status, clickable for config details
 - **Agents** with their descriptions and full prompt definitions
-- **Environment** variables you've set in settings.json
+- **Environment** variables you've set in settings.json, clickable to copy values
 - **Memory** files across all your projects, each one readable in full
+- **Tactical** an interactive canvas visualisation showing your entire setup as a Star Trek tactical display with force-directed graph, rotating scanner line, and clickable nodes
+- **Comms** scrollable log of all chat messages
+- **Config** model selector, voice engine, ElevenLabs setup, sound effects toggle
 
 Every row is clickable. The detail panel slides open on the right, renders the markdown properly with headers, tables, code blocks, lists, the works. JSON configs get syntax highlighted automatically with color-coded keys, strings, numbers, and booleans. It genuinely looks like you're reading a classified Starfleet briefing.
 
@@ -73,18 +76,23 @@ In static mode these copy to clipboard. In live server mode, OPEN FILE actually 
 
 Two toggle buttons in the COMPUTER bar:
 
-**VOICE** activates Web Speech API output. When Claude responds through the COMPUTER bar, the response gets read aloud. On macOS it picks Samantha by default which, with the pitch nudged up slightly and the rate slowed down, gives a reasonably computer-like delivery. It won't fool anyone into thinking it's Majel Barrett, but it fits the vibe.
+**VOICE** activates voice output. Two engines available:
 
-**SFX** enables LCARS sound effects on every interaction. Navigation clicks, detail panel opens, sending messages, receiving responses, all get synthesized beeps via the Web Audio API. No sound files, no external assets, just sine wave oscillators tuned to the right frequencies. The nav beep is a quick 1200Hz chirp. Opening a detail panel does a two-tone 800Hz then 1600Hz. Sending a message drops to 600Hz then rises to 900Hz. Subtle, satisfying, authentic.
+- **Browser (free)** uses Web Speech API. On macOS it picks Samantha by default with pitch and rate tuned for a computer-like delivery.
+- **ElevenLabs (premium)** uses the ElevenLabs API for realistic AI voices. Configure your API key in the CONFIG panel and browse all your available voices with live audio previews before selecting one. No credits spent on previews.
 
-Both are toggleable at any time. SFX is on by default, voice is off.
+**SFX** enables LCARS sound effects on every interaction. Navigation clicks, detail panel opens, sending messages, receiving responses, all get synthesized beeps via the Web Audio API. No sound files, no external assets, just sine wave oscillators tuned to the right frequencies.
+
+**LOG** shows/hides the last computer response. Responses persist after the stream ends. You can minimise the response panel to a slim bar, expand it again, or dismiss it entirely.
+
+All toggleable at any time. SFX is on by default, voice is off.
 
 ## Configuration
 
 | Variable | Default | What it does |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | (none) | Required for COMPUTER bar chat. Get one from [console.anthropic.com](https://console.anthropic.com/) |
-| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Which model the COMPUTER bar talks to |
+| `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Which model the COMPUTER bar talks to (also configurable in the CONFIG panel) |
 | `PORT` | `3200` | Server port for live mode |
 
 ## How it actually works
@@ -100,10 +108,12 @@ The whole thing is a Node.js script that walks your `~/.claude/` directory tree:
 
 It reads every file, parses the YAML frontmatter, extracts the markdown body, and generates a single self-contained HTML file with all the data embedded as a JSON blob. The LCARS interface, the CSS, the JavaScript, the syntax highlighter, the markdown renderer, the chat client, the voice synthesis, the sound effects, all inline in one HTML file. No build step, no bundler, no framework.
 
-In live mode, the server adds three API endpoints:
+In live mode, the server adds API endpoints:
 - `POST /api/chat` proxies to the Anthropic Messages API with SSE streaming
 - `POST /api/open` opens files in your default editor
 - `POST /api/save` saves edited files back to disk
+- `POST /api/voices` lists available ElevenLabs voices
+- `POST /api/tts` proxies text-to-speech to ElevenLabs
 
 All file operations are sandboxed to `~/.claude/` only. The server validates every path and rejects anything outside that directory.
 
