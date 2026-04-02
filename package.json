@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "node src/generate.js",
-    "open": "node src/generate.js && open dashboard.html",
+    "start": "node src/server.js",
+    "open": "node src/generate.js && open http://localhost:3200",
     "serve": "node src/server.js"
   },
   "keywords": [

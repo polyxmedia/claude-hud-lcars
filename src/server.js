@@ -33,6 +33,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Health check for auto-detection from static HTML
+  if (req.method === 'GET' && req.url === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ status: 'ok', chat: !!API_KEY }));
+    return;
+  }
+
   // Serve dashboard
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
     try {
@@ -494,4 +501,11 @@ server.listen(PORT, () => {
     console.log('  Chat disabled. Set ANTHROPIC_API_KEY to enable.');
     console.log('');
   }
+
+  // Auto-open browser
+  const url = 'http://localhost:' + PORT;
+  import('child_process').then(({ exec }) => {
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(cmd + ' ' + url);
+  });
 });

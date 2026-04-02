@@ -52,32 +52,104 @@ function getSettings() {
   catch(e) { console.warn('Warning: settings.json parse error:', e.message); return null; }
 }
 
+function parseMcpEntry(name, c, source) {
+  let serverType = 'unknown';
+  const mainArg = (c.args || []).slice(-1)[0] || '';
+  if (c.command === 'node') serverType = 'node';
+  else if (c.command === 'uvx' || c.command === 'uv') serverType = 'python';
+  else if (c.command === 'npx') serverType = 'npx';
+  else if (c.command === 'docker') serverType = 'docker';
+
+  let fileStatus = 'unknown';
+  if (mainArg.endsWith('.js') || mainArg.endsWith('.mjs') || mainArg.endsWith('.py')) {
+    fileStatus = fs.existsSync(mainArg) ? 'found' : 'missing';
+  }
+
+  const envCount = c.env ? Object.keys(c.env).length : 0;
+
+  return {
+    name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
+    serverType, fileStatus, envCount, source,
+    entryPoint: mainArg,
+    config: { ...c, env: c.env ? '{redacted — ' + envCount + ' vars}' : undefined },
+  };
+}
+
 function getMcpServers(s) {
-  if (!s?.mcpServers) return [];
-  return Object.entries(s.mcpServers).map(([name, c]) => {
-    // Determine server type from command/args
-    let serverType = 'unknown';
-    const mainArg = (c.args || []).slice(-1)[0] || '';
-    if (c.command === 'node') serverType = 'node';
-    else if (c.command === 'uvx' || c.command === 'uv') serverType = 'python';
-    else if (c.command === 'npx') serverType = 'npx';
-    else if (c.command === 'docker') serverType = 'docker';
+  const out = [];
+  const seen = new Set();
 
-    // Check if entry point exists
-    let fileStatus = 'unknown';
-    if (mainArg.endsWith('.js') || mainArg.endsWith('.mjs') || mainArg.endsWith('.py')) {
-      fileStatus = fs.existsSync(mainArg) ? 'found' : 'missing';
+  // 1. From settings.json mcpServers
+  if (s?.mcpServers) {
+    for (const [name, c] of Object.entries(s.mcpServers)) {
+      out.push(parseMcpEntry(name, c, 'settings.json'));
+      seen.add(name);
     }
+  }
 
-    const envCount = c.env ? Object.keys(c.env).length : 0;
+  // 2. From project-level .mcp.json files (scan common Code directories)
+  const homeDir = os.homedir();
+  const searchDirs = [
+    homeDir, // ~/.mcp.json
+    path.join(homeDir, 'Code'),
+    path.join(homeDir, 'Projects'),
+    path.join(homeDir, 'code'),
+    path.join(homeDir, 'projects'),
+    path.join(homeDir, 'Developer'),
+    path.join(homeDir, 'dev'),
+    path.join(homeDir, 'src'),
+    path.join(homeDir, 'repos'),
+    path.join(homeDir, 'workspace'),
+    path.join(homeDir, 'work'),
+    path.join(homeDir, 'Documents'),
+    path.join(homeDir, 'Desktop'),
+  ];
 
-    return {
-      name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
-      serverType, fileStatus, envCount,
-      entryPoint: mainArg,
-      config: { ...c, env: c.env ? '{redacted — ' + envCount + ' vars}' : undefined },
-    };
-  });
+  // Check home directory root
+  const homeMcp = path.join(homeDir, '.mcp.json');
+  if (fs.existsSync(homeMcp)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(homeMcp, 'utf-8'));
+      if (data.mcpServers) {
+        for (const [name, c] of Object.entries(data.mcpServers)) {
+          if (!seen.has(name)) { out.push(parseMcpEntry(name, c, '~/.mcp.json')); seen.add(name); }
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Add user-specified directories from CLAUDE_HUD_DIRS env var
+  if (process.env.CLAUDE_HUD_DIRS) {
+    for (const d of process.env.CLAUDE_HUD_DIRS.split(':').filter(Boolean)) {
+      const resolved = d.startsWith('~') ? path.join(homeDir, d.slice(1)) : d;
+      if (!searchDirs.includes(resolved)) searchDirs.push(resolved);
+    }
+  }
+
+  // Scan one level deep in common dirs
+  for (const dir of searchDirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const mcpFile = path.join(dir, entry.name, '.mcp.json');
+        if (!fs.existsSync(mcpFile)) continue;
+        try {
+          const data = JSON.parse(fs.readFileSync(mcpFile, 'utf-8'));
+          if (!data.mcpServers) continue;
+          const proj = entry.name;
+          for (const [name, c] of Object.entries(data.mcpServers)) {
+            if (!seen.has(name)) {
+              out.push(parseMcpEntry(name, c, proj + '/.mcp.json'));
+              seen.add(name);
+            }
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+  }
+
+  return out;
 }
 
 function getHooks(s) {
@@ -1861,6 +1933,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 </div>
 
 <script>
+// Auto-detect live server
+(function() {
+  var x = new XMLHttpRequest();
+  x.open('GET', 'http://localhost:3200/api/health', false);
+  try { x.timeout = 1000; x.send(); if (x.status === 200) { window.HUD_LIVE = true; } } catch(e) {}
+})();
 const D=${escJ(D)};
 const VIZ=${JSON.stringify({
   skills: skills.map(s => ({ name: s.name, desc: (s.desc||'').slice(0,80), ver: s.ver, ctx: s.ctx })),
@@ -3639,7 +3717,7 @@ function onSearch() {
     var highlighted = esc(m.snippet);
     var qi = highlighted.toLowerCase().indexOf(m.q.toLowerCase());
     if (qi >= 0) { highlighted = highlighted.slice(0, qi) + '<mark>' + highlighted.slice(qi, qi + m.q.length) + '</mark>' + highlighted.slice(qi + m.q.length); }
-    return '<div class="sr" onclick="searchGo(&apos;'+m.key+'&apos;,&apos;'+sec+'&apos;)"><span class="sr-type" style="color:'+col+'">'+m.type+'</span><span class="sr-name">'+esc(m.title)+'</span><span class="sr-match">'+highlighted+'</span></div>';
+    return '<div class="sr" data-key="'+m.key+'" data-sec="'+sec+'" onclick="searchGo(this.dataset.key,this.dataset.sec)"><span class="sr-type" style="color:'+col+'">'+m.type+'</span><span class="sr-name">'+esc(m.title)+'</span><span class="sr-match">'+highlighted+'</span></div>';
   }).join('');
 }
 
@@ -3695,13 +3773,14 @@ function buildLegend() {
 
 var resetGraphFn = null;
 function resetGraph() {
+  gZoom = 1;
   if (resetGraphFn) resetGraphFn();
   beepAction();
 }
 
 // ═══ TACTICAL VISUALISATION ═══
 (function() {
-  var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null, dragNode = null, isDragging = false;
+  var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null, dragNode = null, isDragging = false, gZoom = 1;
   var COLORS = {
     skills: '#9999FF', mcp: '#FF9900', hooks: '#CC9966',
     plugins: '#CC99CC', agents: '#FFCC99', env: '#66CCCC',
@@ -3817,6 +3896,7 @@ function resetGraph() {
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(W/2, H/2);
+    ctx.scale(gZoom, gZoom);
 
     // Grid rings (tactical scanner look)
     [0.15, 0.3, 0.5, 0.75].forEach(function(pct) {
@@ -3874,7 +3954,7 @@ function resetGraph() {
     hoveredNode = null;
     // First pass: hit test
     nodes.forEach(function(n) {
-      var dx = mouseX - W/2 - n.x, dy = mouseY - H/2 - n.y;
+      var dx = (mouseX - W/2) / gZoom - n.x, dy = (mouseY - H/2) / gZoom - n.y;
       if (Math.sqrt(dx*dx + dy*dy) < n.r + 8) hoveredNode = n;
     });
 
@@ -4137,8 +4217,8 @@ function resetGraph() {
       mouseY = e.clientY - rect.top;
       if (dragNode) {
         isDragging = true;
-        dragNode.x = mouseX - W/2;
-        dragNode.y = mouseY - H/2;
+        dragNode.x = (mouseX - W/2) / gZoom;
+        dragNode.y = (mouseY - H/2) / gZoom;
         dragNode.vx = 0; dragNode.vy = 0;
       }
       canvas.style.cursor = dragNode ? 'grabbing' : (hoveredNode ? 'grab' : 'default');
@@ -4152,6 +4232,11 @@ function resetGraph() {
       if (dragNode && dragNode.group !== 'core') dragNode.fixed = false;
       dragNode = null;
     });
+    canvas.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var delta = e.deltaY > 0 ? 0.9 : 1.1;
+      gZoom = Math.max(0.3, Math.min(5, gZoom * delta));
+    }, { passive: false });
     canvas.addEventListener('click', function() {
       if (isDragging) { isDragging = false; return; }
       if (!hoveredNode || hoveredNode.group === 'core') return;
