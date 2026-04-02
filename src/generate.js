@@ -1060,10 +1060,28 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             <div class="cfg-section-body">
               <div class="cfg-row">
                 <span class="cfg-label">Model</span>
-                <span class="cfg-desc">Which Claude model the COMPUTER bar talks to. Requires server restart to take effect.</span>
-                <span class="cfg-input"><input type="text" id="cfg-model" value="${esc(S?.model || 'claude-sonnet-4-6')}" disabled style="opacity:0.5"></span>
+                <span class="cfg-desc">Which Claude model the COMPUTER bar talks to.</span>
+                <span class="cfg-input">
+                  <div class="lcars-select" id="cfg-model-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-model-wrap')"><span>${esc(S?.model || 'claude-sonnet-4-6')}</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option${(S?.model||'').includes('opus')||!(S?.model)?' selected':''}" data-value="claude-opus-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                        <span class="opt-label">Claude Opus 4.6</span>
+                        <span class="opt-sub">Most capable. Deep reasoning, complex tasks.</span>
+                      </div>
+                      <div class="lcars-option${(S?.model||'').includes('sonnet')?' selected':''}" data-value="claude-sonnet-4-6" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                        <span class="opt-label">Claude Sonnet 4.6</span>
+                        <span class="opt-sub">Fast and capable. Best balance of speed and quality.</span>
+                      </div>
+                      <div class="lcars-option" data-value="claude-haiku-4-5" onclick="selectLcarsOption('cfg-model-wrap',this);onModelChange()">
+                        <span class="opt-label">Claude Haiku 4.5</span>
+                        <span class="opt-sub">Fastest. Quick answers, lower cost.</span>
+                      </div>
+                    </div>
+                  </div>
+                </span>
               </div>
-              <p class="cfg-note">Set via CLAUDE_MODEL env var when starting the server.</p>
+              <p class="cfg-note">Model change takes effect on the next message. No server restart needed.</p>
             </div>
           </div>
 
@@ -1939,6 +1957,10 @@ function loadConfig() {
       var fields = document.getElementById('cfg-eleven-fields');
       if (fields) fields.style.display = 'block';
     }
+    if (cfg.model) {
+      setLcarsValue('cfg-model-wrap', cfg.model);
+      window.HUD_MODEL = cfg.model;
+    }
     if (cfg.sfx === 'off') {
       setLcarsValue('cfg-sfx-wrap', 'off');
       onSfxChange();
@@ -1961,6 +1983,7 @@ function saveConfig() {
     elevenKey: document.getElementById('cfg-eleven-key').value,
     elevenVoice: document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL',
     sfx: getLcarsValue('cfg-sfx-wrap'),
+    model: getLcarsValue('cfg-model-wrap') || 'claude-sonnet-4-6',
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
 }
@@ -1976,6 +1999,13 @@ function onVoiceEngineChange() {
   fields.style.display = engine === 'elevenlabs' ? 'block' : 'none';
   saveConfig();
   updateElevenStatus();
+}
+
+function onModelChange() {
+  var model = getLcarsValue('cfg-model-wrap');
+  window.HUD_MODEL = model;
+  saveConfig();
+  toast('MODEL: ' + model);
 }
 
 function onSfxChange() {
@@ -2498,7 +2528,7 @@ function sendGlobal() {
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory }),
+    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL }),
   }).then(function(res) {
     if (!res.ok) {
       return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
