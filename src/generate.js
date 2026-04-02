@@ -466,6 +466,37 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .computer-response pre code{background:none;color:inherit;padding:0}
 .computer-response strong{color:#eee}
 
+/* ═══ WAVEFORM VISUALIZER ═══ */
+.waveform{
+  display:flex;align-items:center;gap:2px;height:24px;padding:0 8px;
+}
+.waveform.hidden{display:none}
+.waveform .bar{
+  width:3px;background:var(--orange);border-radius:1px;
+  transition:height 0.05s;
+}
+.waveform.listening .bar{background:var(--salmon)}
+.waveform.speaking .bar{background:var(--blue)}
+
+.waveform-label{
+  font-family:'Antonio',sans-serif;font-size:0.65rem;font-weight:600;
+  letter-spacing:0.12em;text-transform:uppercase;padding:0 6px;
+  white-space:nowrap;
+}
+.waveform-label.listening{color:var(--salmon)}
+.waveform-label.speaking{color:var(--blue)}
+
+/* Mic button */
+.mic-btn{
+  background:var(--salmon);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;
+  padding:6px 12px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:12px;transition:filter 0.12s,opacity 0.15s;white-space:nowrap;
+}
+.mic-btn:hover{filter:brightness(1.2)}
+.mic-btn.active{background:var(--red);animation:mic-pulse 1s infinite}
+@keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+
 /* Adjust main content to not be hidden by the bar */
 .mn{padding-bottom:48px}
 
@@ -639,6 +670,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="computer-bar-input">
     <textarea id="cb-in" placeholder="Ask the computer anything..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobal()}"></textarea>
   </div>
+  <button class="mic-btn" id="mic-btn" onclick="toggleMic()">MIC</button>
+  <span class="waveform-label hidden" id="wf-label"></span>
+  <div class="waveform hidden" id="waveform"></div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
   <div class="computer-bar-toggles">
     <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleBtn(this)">VOICE</button>
@@ -916,6 +950,176 @@ if (window.speechSynthesis) {
   speechSynthesis.getVoices();
   speechSynthesis.onvoiceschanged = function(){ speechSynthesis.getVoices(); };
 }
+
+// ═══ WAVEFORM VISUALIZER ═══
+var wfEl = null;
+var wfBars = 12;
+var wfInterval = null;
+
+function initWaveform() {
+  wfEl = document.getElementById('waveform');
+  if (!wfEl) return;
+  wfEl.innerHTML = '';
+  for (var i = 0; i < wfBars; i++) {
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.style.height = '4px';
+    wfEl.appendChild(bar);
+  }
+}
+
+function showWaveform(mode) {
+  if (!wfEl) initWaveform();
+  var label = document.getElementById('wf-label');
+  wfEl.classList.remove('hidden', 'listening', 'speaking');
+  label.classList.remove('hidden', 'listening', 'speaking');
+  wfEl.classList.add(mode);
+  label.classList.add(mode);
+  label.textContent = mode === 'listening' ? 'LISTENING' : 'SPEAKING';
+  clearInterval(wfInterval);
+  wfInterval = setInterval(function() {
+    var bars = wfEl.querySelectorAll('.bar');
+    for (var i = 0; i < bars.length; i++) {
+      bars[i].style.height = (4 + Math.random() * 18) + 'px';
+    }
+  }, 80);
+}
+
+function hideWaveform() {
+  clearInterval(wfInterval);
+  if (wfEl) {
+    wfEl.classList.add('hidden');
+    wfEl.classList.remove('listening', 'speaking');
+    var bars = wfEl.querySelectorAll('.bar');
+    for (var i = 0; i < bars.length; i++) bars[i].style.height = '4px';
+  }
+  var label = document.getElementById('wf-label');
+  if (label) label.classList.add('hidden');
+  document.getElementById('mic-btn').classList.remove('active');
+  document.getElementById('mic-btn').textContent = 'MIC';
+}
+
+// ═══ SPEECH RECOGNITION (Mic Input) ═══
+var recognition = null;
+var micActive = false;
+
+function toggleMic() {
+  if (micActive) {
+    stopMic();
+  } else {
+    startMic();
+  }
+}
+
+function startMic() {
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast('Speech recognition not supported in this browser');
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  micActive = true;
+  document.getElementById('mic-btn').classList.add('active');
+  document.getElementById('mic-btn').textContent = 'STOP';
+  showWaveform('listening');
+  beepAction();
+
+  var input = document.getElementById('cb-in');
+  var finalTranscript = '';
+
+  recognition.onresult = function(e) {
+    var interim = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    input.value = finalTranscript + interim;
+  };
+
+  recognition.onend = function() {
+    micActive = false;
+    hideWaveform();
+    if (finalTranscript.trim()) {
+      beepSend();
+      sendGlobal();
+    }
+  };
+
+  recognition.onerror = function(e) {
+    micActive = false;
+    hideWaveform();
+    if (e.error !== 'no-speech') {
+      toast('Mic error: ' + e.error);
+    }
+  };
+
+  recognition.start();
+}
+
+function stopMic() {
+  if (recognition) {
+    recognition.stop();
+  }
+  micActive = false;
+  hideWaveform();
+}
+
+// Override speak to show waveform, interruptible
+speak = function(text) {
+  if (!isToggleOn('voice-toggle')) return;
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  // Only speak the first sentence or 200 chars, whichever is shorter
+  var short = text.replace(/[#*_\[\]]/g, '').trim();
+  var firstSentence = short.match(/^[^.!?]+[.!?]/);
+  var toSpeak = firstSentence ? firstSentence[0] : short.slice(0, 200);
+  var u = new SpeechSynthesisUtterance(toSpeak);
+  var voices = speechSynthesis.getVoices();
+  var preferred = voices.find(function(v){return v.name.includes('Samantha')})
+    || voices.find(function(v){return v.name.includes('Karen')})
+    || voices.find(function(v){return v.name.includes('Victoria')})
+    || voices.find(function(v){return v.name.includes('Fiona')})
+    || voices.find(function(v){return v.lang.startsWith('en') && v.name.toLowerCase().includes('female')})
+    || voices.find(function(v){return v.lang.startsWith('en-')});
+  if (preferred) u.voice = preferred;
+  u.rate = 0.95;
+  u.pitch = 1.1;
+  u.onstart = function() { showWaveform('speaking'); };
+  u.onend = function() { hideWaveform(); };
+  u.onerror = function() { hideWaveform(); };
+  speechSynthesis.speak(u);
+};
+
+// Interrupt speech on any user action
+function stopSpeaking() {
+  if (window.speechSynthesis && speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    hideWaveform();
+  }
+}
+
+// Click waveform to stop
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.waveform') || e.target.closest('.waveform-label')) {
+    stopSpeaking();
+  }
+});
+
+// Typing stops speech
+document.getElementById('cb-in').addEventListener('input', stopSpeaking);
+
+// Escape stops speech
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') stopSpeaking();
+});
 
 // ═══ GLOBAL COMPUTER CHAT ═══
 var chatHistory = [];
