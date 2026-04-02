@@ -173,6 +173,7 @@ function gen() {
     { id: 'agents', label: 'AGENTS', color: '#FFCC99', count: agents.length },
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
+    { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
   ];
 
 return `<!DOCTYPE html>
@@ -369,6 +370,36 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ═══ COMMS / CHAT ═══ */
+.comms{display:flex;flex-direction:column;height:100%;min-height:0}
+.comms-log{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.comms-msg{max-width:85%;line-height:1.7;font-size:0.88rem}
+.comms-msg.user{align-self:flex-end;background:rgba(153,153,255,0.1);border:1px solid rgba(153,153,255,0.2);padding:10px 14px;color:var(--blue)}
+.comms-msg.ai{align-self:flex-start;color:var(--text);padding:10px 0}
+.comms-msg.ai pre{background:#0a0a0c;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan)}
+.comms-msg.ai code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px;font-size:0.84rem}
+.comms-msg.err{color:var(--red);font-size:0.82rem;padding:8px 12px;border:1px solid rgba(204,68,68,0.2);background:rgba(204,68,68,0.05)}
+.comms-msg.sys{color:var(--dim);font-size:0.78rem;text-align:center;align-self:center}
+.comms-input{display:flex;gap:4px;padding:8px;border-top:2px solid #1a1a1e;background:#060608}
+.comms-input textarea{
+  flex:1;background:#0a0a0c;border:1px solid #222;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.88rem;
+  padding:10px 14px;resize:none;height:44px;outline:none;
+  transition:border-color 0.15s;
+}
+.comms-input textarea:focus{border-color:var(--orange)}
+.comms-send{
+  background:var(--orange);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.9rem;font-weight:600;
+  padding:0 20px;cursor:pointer;letter-spacing:0.1em;text-transform:uppercase;
+  border-radius:0 14px 14px 0;transition:filter 0.12s;
+}
+.comms-send:hover{filter:brightness(1.3)}
+.comms-send:disabled{opacity:0.4;cursor:default;filter:none}
+.comms-toolbar{display:flex;gap:4px;padding:6px 8px;border-top:1px solid #1a1a1e;background:#060608;align-items:center}
+.comms-toolbar label{font-size:0.7rem;color:var(--dim);letter-spacing:0.05em;display:flex;align-items:center;gap:6px;cursor:pointer}
+.comms-toolbar input[type=checkbox]{accent-color:var(--orange)}
+
 /* ═══ BOTTOM BAR ═══ */
 .bb{grid-column:2;display:flex;gap:4px}
 .bb-elbow{width:72px;background:var(--lavender);border-radius:48px 0 0 0;flex-shrink:0}
@@ -390,7 +421,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <nav class="sb">
   <div class="sb-top"><h1>Claude<br>HUD</h1><small>LCARS INTERFACE // ${stardate}</small></div>
   <div class="sb-nav">
-    ${sections.map((s,i) => `<button class="nb${i===0?' act':''}" style="background:${s.color}" onclick="nav('${s.id}',this)">${s.label} <span class="nc">${String(s.count).padStart(3,'0')}</span></button>`).join('\n    ')}
+    ${sections.map((s,i) => `<button class="nb${i===0?' act':''}" style="background:${s.color}" onclick="nav('${s.id}',this)">${s.label} ${s.count!==null?`<span class="nc">${String(s.count).padStart(3,'0')}</span>`:''}</button>`).join('\n    ')}
   </div>
   <div class="sb-foot">STARDATE ${stardate} // ${ts}</div>
 </nav>
@@ -486,6 +517,22 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>`).join('')}
       </div>
 
+      <div class="sec" id="s-comms">
+        <div class="comms">
+          <div class="comms-log" id="comms-log">
+            <div class="comms-msg sys" id="comms-status">COMMS CHANNEL READY</div>
+          </div>
+          <div class="comms-input">
+            <textarea id="comms-in" placeholder="Enter message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+            <button class="comms-send" id="comms-send" onclick="sendMsg()">SEND</button>
+          </div>
+          <div class="comms-toolbar">
+            <label><input type="checkbox" id="voice-toggle"> VOICE OUTPUT</label>
+            <label><input type="checkbox" id="sound-toggle" checked> LCARS SOUNDS</label>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <div class="dp" id="dp">
@@ -514,11 +561,18 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 const D=${escJ(D)};
 
 function nav(id,el){
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('on')});
   document.getElementById('s-'+id).classList.add('on');
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('act'));
+  document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('act')});
   el.classList.add('act');
   close_();
+  // In comms mode, hide the detail panel column entirely
+  if (id === 'comms') {
+    document.getElementById('mc').classList.remove('open');
+    document.getElementById('dp').style.display = 'none';
+  } else {
+    document.getElementById('dp').style.display = '';
+  }
 }
 
 function open_(k){
@@ -681,9 +735,163 @@ function md(t) {
 }
 
 function esc(s) {
-  const d = document.createElement('div');
+  var d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// ═══ LCARS SOUNDS (Web Audio API, no files) ═══
+var audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function lcarsBeep(freq, dur) {
+  if (!document.getElementById('sound-toggle').checked) return;
+  var ctx = getAudio();
+  var osc = ctx.createOscillator();
+  var gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = freq;
+  osc.type = 'sine';
+  gain.gain.setValueAtTime(0.08, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + dur);
+}
+
+function beepNav() { lcarsBeep(1200, 0.08); }
+function beepOpen() { lcarsBeep(800, 0.06); setTimeout(function(){lcarsBeep(1600, 0.06)}, 60); }
+function beepAction() { lcarsBeep(1000, 0.05); }
+function beepSend() { lcarsBeep(600, 0.05); setTimeout(function(){lcarsBeep(900, 0.08)}, 80); }
+function beepReceive() { lcarsBeep(440, 0.12); }
+
+// Patch nav and open_ to add sounds
+var _origNav = nav;
+nav = function(id, el) { beepNav(); _origNav(id, el); };
+var _origOpen = open_;
+open_ = function(k) { beepOpen(); _origOpen(k); };
+
+// ═══ VOICE OUTPUT (Web Speech API) ═══
+function speak(text) {
+  if (!document.getElementById('voice-toggle').checked) return;
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance(text.slice(0, 500));
+  var voices = speechSynthesis.getVoices();
+  // Prefer a female English voice
+  var preferred = voices.find(function(v){return v.name.includes('Samantha')})
+    || voices.find(function(v){return v.name.includes('Karen')})
+    || voices.find(function(v){return v.name.includes('Victoria')})
+    || voices.find(function(v){return v.name.includes('Fiona')})
+    || voices.find(function(v){return v.lang.startsWith('en') && v.name.toLowerCase().includes('female')})
+    || voices.find(function(v){return v.lang.startsWith('en-')});
+  if (preferred) u.voice = preferred;
+  u.rate = 0.95;
+  u.pitch = 1.1;
+  speechSynthesis.speak(u);
+}
+
+// Pre-load voices
+if (window.speechSynthesis) {
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = function(){ speechSynthesis.getVoices(); };
+}
+
+// ═══ CHAT / COMMS ═══
+var chatHistory = [];
+
+function addMsg(role, text) {
+  var log = document.getElementById('comms-log');
+  var div = document.createElement('div');
+  div.className = 'comms-msg ' + role;
+  if (role === 'ai') {
+    div.innerHTML = md(text);
+  } else {
+    div.textContent = text;
+  }
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function sendMsg() {
+  var input = document.getElementById('comms-in');
+  var text = input.value.trim();
+  if (!text) return;
+
+  if (!window.HUD_LIVE) {
+    addMsg('err', 'COMMS OFFLINE. Run with: node src/server.js');
+    return;
+  }
+
+  beepSend();
+  input.value = '';
+  addMsg('user', text);
+  chatHistory.push({ role: 'user', content: text });
+
+  var btn = document.getElementById('comms-send');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  var aiDiv = addMsg('ai', '');
+  var fullText = '';
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: chatHistory }),
+  }).then(function(res) {
+    if (!res.ok) {
+      return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
+    }
+
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+
+    function pump() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          // Done
+          chatHistory.push({ role: 'assistant', content: fullText });
+          btn.disabled = false;
+          btn.textContent = 'SEND';
+          beepReceive();
+          speak(fullText);
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split('\\n');
+        buffer = lines.pop() || '';
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (line.startsWith('data: ')) {
+            var data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            try {
+              var evt = JSON.parse(data);
+              if (evt.type === 'content_block_delta' && evt.delta && evt.delta.text) {
+                fullText += evt.delta.text;
+                aiDiv.innerHTML = md(fullText);
+                var log = document.getElementById('comms-log');
+                log.scrollTop = log.scrollHeight;
+              }
+            } catch(e) {}
+          }
+        }
+        return pump();
+      });
+    }
+
+    return pump();
+  }).catch(function(e) {
+    addMsg('err', 'COMMS ERROR: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'SEND';
+  });
 }
 </script>
 </body></html>`;
