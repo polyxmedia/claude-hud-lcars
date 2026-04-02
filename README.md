@@ -15,6 +15,10 @@
   <img src="assets/preview.png" alt="claude-hud-lcars dashboard preview" width="100%">
 </p>
 
+<p align="center">
+  <img src="assets/about.png" alt="claude-hud-lcars about tab" width="100%">
+</p>
+
 ---
 
 Your entire Claude Code setup, rendered as a Star Trek LCARS terminal. Skills, agents, hooks, MCP servers, plugins, memory files, environment variables, all of it visible, searchable, and actionable from one interface. Click anything to read the full content like you're pulling up a file on a PADD.
