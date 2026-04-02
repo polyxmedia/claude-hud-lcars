@@ -230,18 +230,11 @@ const server = http.createServer(async (req, res) => {
                   }
                 }
               } else if (evt.type === 'result') {
-                // Final result
-                if (evt.result) {
-                  fullOutput += evt.result;
-                  res.write('data: ' + JSON.stringify({ type: 'text', text: evt.result }) + '\n\n');
-                }
+                // Final result - skip text since it duplicates assistant content
+                // Only signal completion
               }
             } catch {
-              // Not JSON, send as raw text
-              if (line.trim()) {
-                fullOutput += line;
-                res.write('data: ' + JSON.stringify({ type: 'text', text: line }) + '\n\n');
-              }
+              // Not JSON, skip - only process structured stream-json output
             }
           }
         });
