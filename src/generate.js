@@ -1256,6 +1256,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 .cfg-save-btn:hover{filter:brightness(1.2)}
 .cfg-note{font-size:0.75rem;color:var(--dim);line-height:1.6;margin-top:8px}
+.lcars-action-btn{font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:5px 14px;border:1.5px solid var(--orange);background:transparent;color:var(--orange);cursor:pointer;border-radius:3px;transition:all 0.15s}
+.lcars-action-btn:hover{opacity:0.8}
+.lcars-action-btn:disabled{border-color:var(--faint);color:var(--faint);cursor:default}
 
 /* ═══ TACTICAL TOOLBAR ═══ */
 .tac-toolbar{
@@ -2171,6 +2174,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-label">Stardate</span>
                 <span class="cfg-desc"></span>
                 <span class="cfg-input" style="color:var(--orange)">${stardate}</span>
+              </div>
+              <div class="cfg-row" id="cfg-server-actions" style="display:none">
+                <span class="cfg-label">Controls</span>
+                <span class="cfg-desc">Restart to pick up config changes. Update pulls latest from npm then restarts.</span>
+                <span class="cfg-input" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="lcars-action-btn" onclick="restartServer(this)" style="border-color:var(--cyan);color:var(--cyan)">&#x21BA; RESTART</button>
+                  <button class="lcars-action-btn" id="cfg-update-btn" onclick="updateServer(this)" style="border-color:var(--orange);color:var(--orange)">&#x2191; UPDATE</button>
+                </span>
               </div>
             </div>
           </div>
@@ -3652,6 +3663,8 @@ setTimeout(function() {
     modeEl.textContent = window.HUD_LIVE ? 'LIVE' : 'STATIC';
     modeEl.style.color = window.HUD_LIVE ? 'var(--green)' : 'var(--dim)';
   }
+  var serverActions = document.getElementById('cfg-server-actions');
+  if (serverActions && window.HUD_LIVE) serverActions.style.display = '';
   // Restore last active tab
   try {
     var lastTab = localStorage.getItem('hud-tab');
@@ -3970,6 +3983,61 @@ function installMarketItem(btn, id, type, sourcePath, mcpConfigJson) {
       }
     })
     .catch(function(e) { btn.disabled = false; btn.textContent = '+ INSTALL'; toast('ERROR: ' + e.message); });
+}
+
+// ═══ SERVER CONTROLS ═══
+function restartServer(btn) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'RESTARTING...'; }
+  fetch('/api/restart', { method: 'POST' }).catch(function(){});
+  toast('Server restarting...');
+  var attempts = 0;
+  var poll = setInterval(function() {
+    attempts++;
+    fetch('/api/health').then(function(r) {
+      if (r.ok) {
+        clearInterval(poll);
+        toast('Server back online — reloading');
+        setTimeout(function() { location.reload(); }, 500);
+      }
+    }).catch(function() {
+      if (attempts > 20) { clearInterval(poll); if (btn) { btn.disabled = false; btn.textContent = '\\u21BA RESTART'; } toast('Server not responding'); }
+    });
+  }, 800);
+}
+
+function updateServer(btn) {
+  if (!window.HUD_LIVE) { toast('Live mode required'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'UPDATING...'; }
+  toast('Pulling latest from npm...');
+  fetch('/api/update', { method: 'POST' }).then(function(r) {
+    var reader = r.body.getReader();
+    var decoder = new TextDecoder();
+    var buf = '';
+    function read() {
+      reader.read().then(function(result) {
+        if (result.done) return;
+        buf += decoder.decode(result.value, { stream: true });
+        var lines = buf.split('\\n');
+        buf = lines.pop();
+        lines.forEach(function(line) {
+          if (!line.startsWith('data: ')) return;
+          try {
+            var msg = JSON.parse(line.slice(6));
+            if (msg.done) {
+              if (msg.code === 0) { toast('Updated — server restarting'); setTimeout(function() { location.reload(); }, 2500); }
+              else { if (btn) { btn.disabled = false; btn.textContent = '\\u2191 UPDATE'; } toast('Update failed (check console)'); }
+            }
+          } catch(e) {}
+        });
+        read();
+      });
+    }
+    read();
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '\\u2191 UPDATE'; }
+    toast('ERROR: ' + e.message);
+  });
 }
 
 // ═══ CREATE NEW ITEMS ═══

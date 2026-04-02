@@ -133,6 +133,18 @@ All toggleable at any time. SFX is on by default, voice is off.
 
 **Q encounters.** Random chance every 2 minutes that Q appears with a quip. Red popup, snap sound, then he vanishes.
 
+## Updating
+
+If you're running `npx`, you always get the latest version — just re-run the command. Nothing to do.
+
+If you installed globally:
+
+```bash
+npm update -g claude-hud-lcars
+```
+
+In live server mode there's also an **UPDATE** button in **CONFIG → Server Info** that pulls the latest from npm and restarts the server automatically, no terminal needed.
+
 ## CLI options
 
 ```
