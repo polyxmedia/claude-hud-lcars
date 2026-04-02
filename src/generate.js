@@ -307,6 +307,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 .sec{display:none}
 .sec.on{display:block}
+#s-viz.on{display:flex}
 
 .sec-h{
   position:sticky;top:0;z-index:5;background:#060608;
@@ -3209,7 +3210,7 @@ function resetGraph() {
 
 // ═══ TACTICAL VISUALISATION ═══
 (function() {
-  var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null;
+  var canvas, ctx, W, H, nodes = [], edges = [], animFrame, mouseX = -1, mouseY = -1, hoveredNode = null, dragNode = null, isDragging = false;
   var COLORS = {
     skills: '#9999FF', mcp: '#FF9900', hooks: '#CC9966',
     plugins: '#CC99CC', agents: '#FFCC99', env: '#66CCCC',
@@ -3380,65 +3381,130 @@ function resetGraph() {
 
     // Draw nodes
     hoveredNode = null;
+    // First pass: hit test
     nodes.forEach(function(n) {
-      // Hit test
-      var sx = n.x, sy = n.y;
-      var dx = mouseX - W/2 - sx, dy = mouseY - H/2 - sy;
-      var isHover = Math.sqrt(dx*dx + dy*dy) < n.r + 6;
-      if (isHover) hoveredNode = n;
+      var dx = mouseX - W/2 - n.x, dy = mouseY - H/2 - n.y;
+      if (Math.sqrt(dx*dx + dy*dy) < n.r + 8) hoveredNode = n;
+    });
 
-      // Glow
-      if (n.group === 'core' || n.isHub) {
-        var glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2.5);
-        glow.addColorStop(0, (COLORS[n.group] || '#FF9900') + '30');
+    nodes.forEach(function(n) {
+      var col = COLORS[n.group] || '#888';
+      var isHover = hoveredNode === n;
+      var hoverScale = isHover ? 1.6 : 1;
+
+      // Outer glow ring on hover (all nodes)
+      if (isHover) {
+        var glowR = n.r * 3;
+        var glow = ctx.createRadialGradient(n.x, n.y, n.r * hoverScale, n.x, n.y, glowR);
+        glow.addColorStop(0, col + '50');
+        glow.addColorStop(0.5, col + '18');
         glow.addColorStop(1, 'transparent');
         ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Ambient glow for hubs/core
+      if (!isHover && (n.group === 'core' || n.isHub)) {
+        var amb = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2.5);
+        amb.addColorStop(0, col + '30');
+        amb.addColorStop(1, 'transparent');
+        ctx.fillStyle = amb;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r * 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Node circle
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      var col = COLORS[n.group] || '#888';
-      ctx.fillStyle = isHover ? '#fff' : col;
-      ctx.fill();
-      if (isHover || n.isHub || n.group === 'core') {
-        ctx.strokeStyle = isHover ? '#fff' : col;
-        ctx.lineWidth = isHover ? 2.5 : 1.5;
+      // Pulsing ring on hover
+      if (isHover) {
+        var pulseR = n.r * hoverScale + 4 + Math.sin(time * 6) * 3;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, pulseR, 0, Math.PI * 2);
+        ctx.strokeStyle = col + '60';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       }
 
-      // Label
+      // Node circle
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r * hoverScale, 0, Math.PI * 2);
+      ctx.fillStyle = isHover ? col : col;
+      ctx.fill();
+      // Border
+      ctx.strokeStyle = isHover ? '#fff' : (n.isHub || n.group === 'core' ? col + 'aa' : 'transparent');
+      ctx.lineWidth = isHover ? 2.5 : 1.5;
+      if (ctx.strokeStyle !== 'transparent') ctx.stroke();
+
+      // Label - always show for hubs/core, show on hover for leaf nodes
       if (n.group === 'core' || n.isHub || isHover) {
-        ctx.font = (n.group === 'core' ? '600 13px' : isHover ? '600 11px' : '600 10px') + " 'Antonio', sans-serif";
-        ctx.fillStyle = isHover ? '#fff' : (n.group === 'core' ? '#000' : col);
+        var fontSize = n.group === 'core' ? 14 : (n.isHub ? 11 : 12);
+        if (isHover && !n.isHub && n.group !== 'core') fontSize = 13;
+        ctx.font = '600 ' + fontSize + "px 'Antonio', sans-serif";
         ctx.textAlign = 'center';
-        ctx.textBaseline = n.group === 'core' ? 'middle' : 'top';
-        var ly = n.group === 'core' ? n.y : n.y + n.r + 5;
-        ctx.fillText(n.label.length > 20 ? n.label.slice(0, 18) + '..' : n.label, n.x, ly);
+
+        var labelText = n.label.length > 24 ? n.label.slice(0, 22) + '..' : n.label;
+        var ly;
+        if (n.group === 'core') {
+          ctx.textBaseline = 'middle';
+          ly = n.y;
+          ctx.fillStyle = '#000';
+        } else {
+          ctx.textBaseline = 'bottom';
+          ly = n.y - n.r * hoverScale - 6;
+          // Draw text backdrop for readability
+          var tw = ctx.measureText(labelText).width;
+          ctx.fillStyle = '#000000cc';
+          ctx.fillRect(n.x - tw/2 - 6, ly - fontSize - 2, tw + 12, fontSize + 6);
+          // Side accent line
+          ctx.fillStyle = col;
+          ctx.fillRect(n.x - tw/2 - 6, ly - fontSize - 2, 3, fontSize + 6);
+          ctx.fillStyle = isHover ? '#fff' : col;
+        }
+        ctx.fillText(labelText, n.x, ly);
       }
     });
 
-    // Tooltip for hovered node
+    // Tooltip card for hovered leaf node
     if (hoveredNode && !hoveredNode.isHub && hoveredNode.group !== 'core') {
-      var tx = hoveredNode.x + W/2 + 16, ty = hoveredNode.y + H/2 - 10;
-      if (tx + 180 > W) tx = hoveredNode.x + W/2 - 196;
       ctx.restore();
-      ctx.font = "600 11px 'Antonio', sans-serif";
-      ctx.fillStyle = '#08080aee';
-      ctx.fillRect(tx - 8, ty - 4, 180, 42);
-      ctx.strokeStyle = COLORS[hoveredNode.group];
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tx - 8, ty - 4, 180, 42);
-      ctx.fillStyle = COLORS[hoveredNode.group];
+      var col = COLORS[hoveredNode.group];
+      var tx = hoveredNode.x + W/2 + 20, ty = hoveredNode.y + H/2 + 14;
+      var boxW = 220, boxH = 52;
+      // Keep on screen
+      if (tx + boxW > W - 8) tx = hoveredNode.x + W/2 - boxW - 20;
+      if (ty + boxH > H - 8) ty = hoveredNode.y + H/2 - boxH - 14;
+
+      // Background
+      ctx.fillStyle = '#0a0a0eee';
+      ctx.beginPath();
+      ctx.roundRect(tx - 10, ty - 6, boxW, boxH, 4);
+      ctx.fill();
+      // Border
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(tx - 10, ty - 6, boxW, boxH, 4);
+      ctx.stroke();
+      // Left accent bar
+      ctx.fillStyle = col;
+      ctx.fillRect(tx - 10, ty - 6, 4, boxH);
+
+      // Type label
+      ctx.font = "700 12px 'Antonio', sans-serif";
+      ctx.fillStyle = col;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(LABELS[hoveredNode.group] || '', tx, ty);
-      ctx.fillStyle = '#ddd';
-      ctx.font = "11px 'JetBrains Mono', monospace";
-      ctx.fillText(hoveredNode.label.length > 22 ? hoveredNode.label.slice(0,20)+'..' : hoveredNode.label, tx, ty + 18);
+      ctx.fillText((LABELS[hoveredNode.group] || '') + ' MODULE', tx + 2, ty + 2);
+      // Name
+      ctx.fillStyle = '#eee';
+      ctx.font = "500 12px 'JetBrains Mono', monospace";
+      var nameText = hoveredNode.label.length > 26 ? hoveredNode.label.slice(0,24)+'..' : hoveredNode.label;
+      ctx.fillText(nameText, tx + 2, ty + 20);
+      // Click hint
+      ctx.fillStyle = '#555';
+      ctx.font = "10px 'JetBrains Mono', monospace";
+      ctx.fillText('click to open', tx + 2, ty + 36);
     } else {
       ctx.restore();
     }
@@ -3478,14 +3544,36 @@ function resetGraph() {
     resize();
     window.addEventListener('resize', resize);
 
+    canvas.addEventListener('mousedown', function(e) {
+      if (hoveredNode) {
+        dragNode = hoveredNode;
+        dragNode.fixed = true;
+        isDragging = false;
+      }
+    });
     canvas.addEventListener('mousemove', function(e) {
       var rect = canvas.getBoundingClientRect();
       mouseX = e.clientX - rect.left;
       mouseY = e.clientY - rect.top;
-      canvas.style.cursor = hoveredNode ? 'pointer' : 'default';
+      if (dragNode) {
+        isDragging = true;
+        dragNode.x = mouseX - W/2;
+        dragNode.y = mouseY - H/2;
+        dragNode.vx = 0; dragNode.vy = 0;
+      }
+      canvas.style.cursor = dragNode ? 'grabbing' : (hoveredNode ? 'grab' : 'default');
     });
-    canvas.addEventListener('mouseleave', function() { mouseX = mouseY = -1; });
+    canvas.addEventListener('mouseup', function() {
+      if (dragNode && dragNode.group !== 'core') dragNode.fixed = false;
+      dragNode = null;
+    });
+    canvas.addEventListener('mouseleave', function() {
+      mouseX = mouseY = -1;
+      if (dragNode && dragNode.group !== 'core') dragNode.fixed = false;
+      dragNode = null;
+    });
     canvas.addEventListener('click', function() {
+      if (isDragging) { isDragging = false; return; }
       if (hoveredNode && hoveredNode.group !== 'core' && !hoveredNode.isHub) {
         var key = hoveredNode.id.replace(/^(skills|mcp|hooks|plugins|agents|env|memory):/, function(m, g) {
           var prefixes = { skills:'s', mcp:'m', hooks:'h', plugins:'p', agents:'a', env:'v', memory:'e' };
