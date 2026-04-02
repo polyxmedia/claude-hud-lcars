@@ -196,6 +196,16 @@ return `<!DOCTYPE html>
 }
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;font-size:14px}
 
+/* ═══ LCARS SCROLLBARS ═══ */
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:#050506;border-left:1px solid #111}
+*::-webkit-scrollbar-thumb{background:var(--orange);border-radius:0;border:2px solid #050506}
+*::-webkit-scrollbar-thumb:hover{background:var(--peach)}
+*::-webkit-scrollbar-thumb:active{background:var(--salmon)}
+*::-webkit-scrollbar-corner{background:#050506}
+/* Firefox */
+*{scrollbar-width:thin;scrollbar-color:var(--orange) #050506}
+
 /* ═══ LCARS LAYOUT ═══ */
 .lcars{display:grid;grid-template-columns:240px 1fr;grid-template-rows:72px 48px 1fr 40px;height:100vh;gap:4px;padding:0}
 
