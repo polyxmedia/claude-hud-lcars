@@ -276,7 +276,54 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   padding:16px 20px 10px;border-bottom:2px solid #1a1a1e;
   font-family:'Antonio',sans-serif;font-size:1.2rem;font-weight:600;
   text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);
+  display:flex;align-items:center;justify-content:space-between;
 }
+.sec-h-new{
+  background:var(--blue);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.75rem;font-weight:600;
+  padding:4px 14px;cursor:pointer;letter-spacing:0.1em;text-transform:uppercase;
+  border-radius:12px;transition:filter 0.12s;
+}
+.sec-h-new:hover{filter:brightness(1.3)}
+
+/* ═══ CREATE FORM ═══ */
+.create-form{
+  display:none;background:#060608;border-bottom:2px solid var(--orange);
+  padding:20px;
+}
+.create-form.active{display:block}
+.create-form h3{
+  font-family:'Antonio',sans-serif;font-size:1rem;font-weight:600;
+  color:var(--orange);text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:14px;
+}
+.cf-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.cf-row label{
+  min-width:100px;font-size:0.78rem;font-weight:600;color:var(--text);
+  text-transform:uppercase;letter-spacing:0.05em;
+}
+.cf-row input,.cf-row textarea,.cf-row select{
+  flex:1;background:#0a0a0c;border:1px solid #222;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  padding:8px 12px;outline:none;
+}
+.cf-row input:focus,.cf-row textarea:focus{border-color:var(--orange)}
+.cf-row textarea{min-height:80px;resize:vertical}
+.cf-actions{display:flex;gap:8px;margin-top:14px}
+.cf-create{
+  background:var(--green);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:8px 20px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:12px;
+}
+.cf-create:hover{filter:brightness(1.2)}
+.cf-cancel{
+  background:var(--tan);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:8px 16px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:12px;
+}
+.cf-cancel:hover{filter:brightness(1.2)}
 
 .r{
   display:grid;grid-template-columns:180px auto 1fr;gap:10px;
@@ -832,7 +879,15 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
     <div class="ls">
 
       <div class="sec on" id="s-skills">
-        <div class="sec-h">Skill Registry</div>
+        <div class="sec-h"><span>Skill Registry</span><button class="sec-h-new" onclick="toggleCreate('skill')">+ NEW</button></div>
+        <div class="create-form" id="cf-skill">
+          <h3>Create New Skill</h3>
+          <div class="cf-row"><label>Name</label><input id="cf-skill-name" placeholder="my-skill"></div>
+          <div class="cf-row"><label>Description</label><input id="cf-skill-desc" placeholder="What this skill does..."></div>
+          <div class="cf-row"><label>Context</label><select id="cf-skill-ctx"><option value="fork">Fork (isolated)</option><option value="inline">Inline (in conversation)</option></select></div>
+          <div class="cf-row"><label>Content</label><textarea id="cf-skill-body" placeholder="# My Skill\n\nSkill instructions here..."></textarea></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createSkill()">CREATE</button><button class="cf-cancel" onclick="toggleCreate('skill')">CANCEL</button></div>
+        </div>
         ${skills.length===0?'<div class="emp">No skills registered</div>':skills.map(s=>`
         <div class="r" onclick="open_('s:${esc(s.name)}')" data-k="s:${esc(s.name)}">
           <span class="r-id">${esc(s.name)}</span>
@@ -842,7 +897,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-mcp">
-        <div class="sec-h">Subsystem Status // MCP Fleet</div>
+        <div class="sec-h"><span>Subsystem Status // MCP Fleet</span><button class="sec-h-new" onclick="toggleCreate('mcp')">+ NEW</button></div>
+        <div class="create-form" id="cf-mcp">
+          <h3>Register New MCP Server</h3>
+          <div class="cf-row"><label>Name</label><input id="cf-mcp-name" placeholder="my-server"></div>
+          <div class="cf-row"><label>Command</label><input id="cf-mcp-cmd" placeholder="node"></div>
+          <div class="cf-row"><label>Args</label><input id="cf-mcp-args" placeholder="/path/to/server.js (space separated)"></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createMcp()">REGISTER</button><button class="cf-cancel" onclick="toggleCreate('mcp')">CANCEL</button></div>
+        </div>
         ${mcp.length===0?'<div class="emp">No servers connected</div>':`
         <div class="mcp-grid">
           ${mcp.map(s=>`
@@ -869,7 +931,15 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-hooks">
-        <div class="sec-h">Hook Intercepts</div>
+        <div class="sec-h"><span>Hook Intercepts</span><button class="sec-h-new" onclick="toggleCreate('hook')">+ NEW</button></div>
+        <div class="create-form" id="cf-hook">
+          <h3>Create New Hook</h3>
+          <div class="cf-row"><label>Event</label><select id="cf-hook-event"><option>PreToolUse</option><option>PostToolUse</option><option>Stop</option><option>SessionStart</option><option>SessionEnd</option><option>UserPromptSubmit</option><option>SubagentStop</option><option>Notification</option></select></div>
+          <div class="cf-row"><label>Matcher</label><input id="cf-hook-matcher" placeholder="Bash (optional, for tool events)"></div>
+          <div class="cf-row"><label>Type</label><select id="cf-hook-type"><option value="command">Shell Command</option><option value="prompt">LLM Prompt</option><option value="http">HTTP Webhook</option><option value="agent">Agent Verifier</option></select></div>
+          <div class="cf-row"><label>Command</label><textarea id="cf-hook-cmd" placeholder="echo 'hook fired'"></textarea></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createHook()">CREATE</button><button class="cf-cancel" onclick="toggleCreate('hook')">CANCEL</button></div>
+        </div>
         ${hooks.length===0?'<div class="emp">No hooks active</div>':hooks.map((h,i)=>`
         <div class="r" onclick="open_('h:${i}')" data-k="h:${i}">
           <span class="r-id">${esc(h.ev)}</span>
@@ -888,7 +958,15 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-agents">
-        <div class="sec-h">Agent Roster</div>
+        <div class="sec-h"><span>Agent Roster</span><button class="sec-h-new" onclick="toggleCreate('agent')">+ NEW</button></div>
+        <div class="create-form" id="cf-agent">
+          <h3>Deploy New Agent</h3>
+          <div class="cf-row"><label>Name</label><input id="cf-agent-name" placeholder="my-agent"></div>
+          <div class="cf-row"><label>Description</label><input id="cf-agent-desc" placeholder="When to use this agent..."></div>
+          <div class="cf-row"><label>Tools</label><input id="cf-agent-tools" placeholder="Read, Grep, Glob, Bash (comma separated)"></div>
+          <div class="cf-row"><label>Prompt</label><textarea id="cf-agent-body" placeholder="You are an expert in..."></textarea></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createAgent()">DEPLOY</button><button class="cf-cancel" onclick="toggleCreate('agent')">CANCEL</button></div>
+        </div>
         ${agents.length===0?'<div class="emp">No agents deployed</div>':agents.map(a=>`
         <div class="r r2" onclick="open_('a:${esc(a.name)}')" data-k="a:${esc(a.name)}">
           <span class="r-id">${esc(a.name)}</span>
@@ -1126,6 +1204,15 @@ function open_(k){
   } else {
     ab.style.display='none';
     ab.innerHTML='';
+  }
+
+  // Close editor if switching items
+  var editor = document.getElementById('hud-editor');
+  if (editor && editor.classList.contains('active')) {
+    editor.classList.remove('active');
+    document.getElementById('dp-b').style.display = '';
+    document.getElementById('dp-actions').style.display = '';
+    currentEditPath = '';
   }
 
   document.getElementById('mc').classList.add('open');
@@ -2184,6 +2271,117 @@ setTimeout(function() {
   } catch(e) {}
   checkMcpStatus();
 }, 100);
+
+// ═══ CREATE NEW ITEMS ═══
+function toggleCreate(type) {
+  var form = document.getElementById('cf-' + type);
+  if (!form) return;
+  form.classList.toggle('active');
+  beepNav();
+}
+
+function createSkill() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var name = document.getElementById('cf-skill-name').value.trim();
+  var desc = document.getElementById('cf-skill-desc').value.trim();
+  var ctx = document.getElementById('cf-skill-ctx').value;
+  var body = document.getElementById('cf-skill-body').value;
+  if (!name) { toast('Name required'); return; }
+
+  var content = '---\\nname: ' + name + '\\ndescription: "' + desc.replace(/"/g, '\\\\"') + '"\\ncontext: ' + ctx + '\\nversion: 1.0.0\\n---\\n\\n' + body;
+  var dir = '${esc(path.join(CLAUDE_DIR, 'skills'))}/' + name;
+  var filePath = dir + '/SKILL.md';
+
+  // Create directory first
+  fetch('/api/save', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ path: filePath, content: content, mkdir: true }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('SKILL CREATED: ' + name);
+      beepAction();
+      toggleCreate('skill');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
+
+function createMcp() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var name = document.getElementById('cf-mcp-name').value.trim();
+  var cmd = document.getElementById('cf-mcp-cmd').value.trim();
+  var argsStr = document.getElementById('cf-mcp-args').value.trim();
+  if (!name || !cmd) { toast('Name and command required'); return; }
+
+  var args = argsStr ? argsStr.split(/\\s+/) : [];
+  // Read current settings, add server, save back
+  fetch('/api/settings-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-mcp', name: name, config: { command: cmd, args: args } }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('MCP SERVER REGISTERED: ' + name);
+      beepAction();
+      toggleCreate('mcp');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
+
+function createHook() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var event = document.getElementById('cf-hook-event').value;
+  var matcher = document.getElementById('cf-hook-matcher').value.trim();
+  var type = document.getElementById('cf-hook-type').value;
+  var cmd = document.getElementById('cf-hook-cmd').value.trim();
+  if (!cmd) { toast('Command/prompt required'); return; }
+
+  var hook = { type: type };
+  if (type === 'command') hook.command = cmd;
+  else if (type === 'prompt' || type === 'agent') hook.prompt = cmd;
+  else if (type === 'http') hook.url = cmd;
+
+  fetch('/api/settings-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-hook', event: event, matcher: matcher || undefined, hook: hook }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('HOOK CREATED: ' + event);
+      beepAction();
+      toggleCreate('hook');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
+
+function createAgent() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var name = document.getElementById('cf-agent-name').value.trim();
+  var desc = document.getElementById('cf-agent-desc').value.trim();
+  var tools = document.getElementById('cf-agent-tools').value.trim();
+  var body = document.getElementById('cf-agent-body').value;
+  if (!name) { toast('Name required'); return; }
+
+  var toolsList = tools ? '\\ntools:\\n' + tools.split(',').map(function(t) { return '  - ' + t.trim(); }).join('\\n') : '';
+  var content = '---\\ndescription: "' + desc.replace(/"/g, '\\\\"') + '"' + toolsList + '\\n---\\n\\n' + body;
+  var filePath = '${esc(path.join(CLAUDE_DIR, 'agents'))}/' + name + '.md';
+
+  fetch('/api/save', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ path: filePath, content: content }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('AGENT DEPLOYED: ' + name);
+      beepAction();
+      toggleCreate('agent');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
 
 // ═══ MCP STATUS CHECK ═══
 function checkMcpStatus() {

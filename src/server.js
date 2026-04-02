@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { path: filePath, content } = JSON.parse(body);
+        const { path: filePath, content, mkdir: mkdirFlag } = JSON.parse(body);
         const claudeDir = path.join(os.homedir(), '.claude');
         const resolved = path.resolve(filePath);
         if (!resolved.startsWith(claudeDir)) {
@@ -93,7 +93,48 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'Can only save files under ~/.claude/' }));
           return;
         }
+        // Create directory if needed
+        const dir = path.dirname(resolved);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(resolved, content, 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Update settings.json (add MCP, hooks, etc.)
+  if (req.method === 'POST' && req.url === '/api/settings-update') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const update = JSON.parse(body);
+        const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+
+        if (update.type === 'add-mcp') {
+          if (!settings.mcpServers) settings.mcpServers = {};
+          settings.mcpServers[update.name] = update.config;
+        } else if (update.type === 'add-hook') {
+          if (!settings.hooks) settings.hooks = {};
+          if (!settings.hooks[update.event]) settings.hooks[update.event] = [];
+          const matcher = { hooks: [update.hook] };
+          if (update.matcher) matcher.matcher = update.matcher;
+          settings.hooks[update.event].push(matcher);
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unknown update type: ' + update.type }));
+          return;
+        }
+
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
