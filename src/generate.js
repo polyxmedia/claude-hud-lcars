@@ -729,7 +729,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="sb-nav">
     ${sections.map((s,i) => `<button class="nb${i===0?' act':''}" style="background:${s.color}" onclick="nav('${s.id}',this)">${s.label} ${s.count!==null?`<span class="nc">${String(s.count).padStart(3,'0')}</span>`:''}</button>`).join('\n    ')}
   </div>
-  <div class="sb-foot">STARDATE ${stardate} // ${ts}</div>
+  <div class="sb-foot">
+    <div>STARDATE ${stardate} // ${ts}</div>
+    <div style="margin-top:6px;font-size:0.55rem;color:var(--faint);letter-spacing:0.06em">
+      <a href="https://polyxmedia.com" target="_blank" style="color:var(--dim);text-decoration:none">polyxmedia.com</a>
+      &nbsp;//&nbsp;
+      <a href="https://x.com/voidmode" target="_blank" style="color:var(--dim);text-decoration:none">@voidmode</a>
+    </div>
+  </div>
 </nav>
 
 <div class="tb">
@@ -861,41 +868,17 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <div class="cfg-row">
                   <span class="cfg-label">API Key</span>
                   <span class="cfg-desc">Get yours from <a href="https://elevenlabs.io" target="_blank" style="color:var(--orange)">elevenlabs.io</a></span>
-                  <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onCfgChange()"></span>
+                  <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onApiKeyChange()"></span>
                 </div>
                 <div class="cfg-row">
                   <span class="cfg-label">Voice</span>
-                  <span class="cfg-desc">Pick a voice character for the LCARS computer.</span>
-                  <span class="cfg-input">
-                    <div class="lcars-select" id="cfg-eleven-voice-wrap">
-                      <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-eleven-voice-wrap')"><span>Sarah (Clear, Professional)</span></button>
-                      <div class="lcars-dropdown">
-                        <div class="lcars-option selected" data-value="EXAVITQu4vr4xnSDxMaL" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Sarah</span>
-                          <span class="opt-sub">Clear, professional female. Closest to LCARS computer.</span>
-                        </div>
-                        <div class="lcars-option" data-value="21m00Tcm4TlvDq8ikWAM" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Rachel</span>
-                          <span class="opt-sub">Warm, calm female. Conversational and measured.</span>
-                        </div>
-                        <div class="lcars-option" data-value="XrExE9yKIg1WjnnlVkGX" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Matilda</span>
-                          <span class="opt-sub">Warm, friendly female. Slightly lower register.</span>
-                        </div>
-                        <div class="lcars-option" data-value="pFZP5JQG7iQjIQuC4Bku" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Lily</span>
-                          <span class="opt-sub">British female. Precise, authoritative.</span>
-                        </div>
-                        <div class="lcars-option" data-value="onwK4e9ZLuTAKqWW03F9" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Daniel</span>
-                          <span class="opt-sub">Deep British male. Commanding, like a captain's log narrator.</span>
-                        </div>
-                        <div class="lcars-option" data-value="N2lVS1w4EtoT3dr4eOWO" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
-                          <span class="opt-label">Callum</span>
-                          <span class="opt-sub">Intense male. Steady, focused delivery.</span>
-                        </div>
-                      </div>
+                  <span class="cfg-desc">Browse your available voices. Click the play button to preview, click the row to select.</span>
+                  <span class="cfg-input" style="width:100%">
+                    <div id="voice-browser-container">
+                      <div class="voice-loading" id="voice-browser-loading">Enter API key to load voices</div>
+                      <div class="voice-browser" id="voice-browser" style="display:none"></div>
                     </div>
+                    <input type="hidden" id="cfg-eleven-voice" value="EXAVITQu4vr4xnSDxMaL">
                   </span>
                 </div>
                 <div class="cfg-row">
@@ -1032,6 +1015,7 @@ function nav(id,el){
   document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('act')});
   el.classList.add('act');
   close_();
+  try{localStorage.setItem('hud-tab',id)}catch(e){}
   // In comms mode, hide the detail panel column entirely
   if (id === 'comms') {
     document.getElementById('mc').classList.remove('open');
@@ -1464,7 +1448,7 @@ function speakElevenLabs(text) {
   fetch('/api/tts', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ text: text.slice(0, 1000) }),
+    body: JSON.stringify({ text: text.slice(0, 1000), voiceId: window.HUD_ELEVEN_VOICE, apiKey: window.HUD_ELEVEN_KEY }),
   }).then(function(r) {
     if (!r.ok) throw new Error('TTS failed');
     return r.blob();
@@ -1776,13 +1760,19 @@ function loadConfig() {
       if (inp) inp.value = cfg.elevenKey;
     }
     if (cfg.elevenVoice) {
-      setLcarsValue('cfg-eleven-voice-wrap', cfg.elevenVoice);
+      document.getElementById('cfg-eleven-voice').value = cfg.elevenVoice;
     }
     if (cfg.sfx === 'off') {
       setLcarsValue('cfg-sfx-wrap', 'off');
       onSfxChange();
     }
     updateElevenStatus();
+    // Auto-load voice browser if we have a key
+    var savedKey = document.getElementById('cfg-eleven-key').value;
+    if (savedKey && savedKey.length > 5) {
+      _lastApiKey = savedKey;
+      loadVoiceBrowser();
+    }
   } catch(e) {}
 }
 
@@ -1790,7 +1780,7 @@ function saveConfig() {
   var cfg = {
     voiceEngine: getLcarsValue('cfg-voice-engine-wrap'),
     elevenKey: document.getElementById('cfg-eleven-key').value,
-    elevenVoice: getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL',
+    elevenVoice: document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL',
     sfx: getLcarsValue('cfg-sfx-wrap'),
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
@@ -1819,17 +1809,35 @@ function onSfxChange() {
   saveConfig();
 }
 
+var _apiKeyTimer = null;
+var _lastApiKey = '';
+
+function onApiKeyChange() {
+  saveConfig();
+  updateElevenStatus();
+  // Debounce voice loading - wait 800ms after user stops typing
+  var key = document.getElementById('cfg-eleven-key').value;
+  if (key && key.length > 5 && key !== _lastApiKey) {
+    clearTimeout(_apiKeyTimer);
+    _apiKeyTimer = setTimeout(function() {
+      _lastApiKey = key;
+      window._voicesLoaded = false;
+      loadVoiceBrowser();
+    }, 800);
+  }
+}
+
 function updateElevenStatus() {
   var el = document.getElementById('cfg-eleven-status');
   if (!el) return;
   var key = document.getElementById('cfg-eleven-key').value;
+  var voiceInput = document.getElementById('cfg-eleven-voice');
   if (key && key.length > 5) {
     el.innerHTML = '<span class="cfg-dot on"></span> CONFIGURED';
     el.className = 'cfg-status online';
-    // Set flag so speak() uses ElevenLabs
     window.HUD_ELEVENLABS = true;
     window.HUD_ELEVEN_KEY = key;
-    window.HUD_ELEVEN_VOICE = getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL';
+    window.HUD_ELEVEN_VOICE = (voiceInput && voiceInput.value) || 'EXAVITQu4vr4xnSDxMaL';
   } else {
     el.innerHTML = '<span class="cfg-dot off"></span> NOT CONFIGURED';
     el.className = 'cfg-status offline';
@@ -1837,20 +1845,190 @@ function updateElevenStatus() {
   }
 }
 
+// ═══ VOICE BROWSER ═══
+var _previewAudio = null;
+
+function loadVoiceBrowser() {
+  var key = document.getElementById('cfg-eleven-key').value;
+  if (!key || key.length < 5) return;
+
+  var loading = document.getElementById('voice-browser-loading');
+  var browser = document.getElementById('voice-browser');
+  loading.textContent = 'SCANNING VOICE DATABASE...';
+  loading.style.display = 'block';
+  browser.style.display = 'none';
+
+  var endpoint = window.HUD_LIVE ? '/api/voices' : 'https://api.elevenlabs.io/v1/voices';
+
+  if (window.HUD_LIVE) {
+    fetch('/api/voices', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ apiKey: key }),
+    }).then(function(r) {
+      if (!r.ok) throw new Error('Failed to fetch voices');
+      return r.json();
+    }).then(function(data) {
+      renderVoiceBrowser(data.voices || []);
+    }).catch(function(e) {
+      loading.textContent = 'VOICE SCAN FAILED: ' + e.message;
+    });
+  } else {
+    fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': key },
+    }).then(function(r) {
+      if (!r.ok) throw new Error('API returned ' + r.status);
+      return r.json();
+    }).then(function(data) {
+      var voices = (data.voices || []).map(function(v) {
+        return {
+          voice_id: v.voice_id,
+          name: v.name,
+          category: v.category || 'unknown',
+          description: v.labels ? Object.values(v.labels).join(', ') : '',
+          preview_url: v.preview_url || null,
+        };
+      });
+      renderVoiceBrowser(voices);
+    }).catch(function(e) {
+      loading.textContent = 'VOICE SCAN FAILED: ' + e.message + '. Try live mode.';
+    });
+  }
+}
+
+function renderVoiceBrowser(voices) {
+  var loading = document.getElementById('voice-browser-loading');
+  var browser = document.getElementById('voice-browser');
+  var selectedId = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
+
+  loading.style.display = 'none';
+  browser.style.display = 'block';
+  browser.innerHTML = '';
+  window._voicesLoaded = true;
+
+  if (!voices.length) {
+    browser.innerHTML = '<div class="voice-loading">NO VOICES FOUND</div>';
+    return;
+  }
+
+  // Sort: premade first, then cloned, alphabetical within
+  voices.sort(function(a, b) {
+    if (a.category === 'premade' && b.category !== 'premade') return -1;
+    if (a.category !== 'premade' && b.category === 'premade') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  voices.forEach(function(v) {
+    var card = document.createElement('div');
+    card.className = 'voice-card' + (v.voice_id === selectedId ? ' selected' : '');
+    card.setAttribute('data-voice-id', v.voice_id);
+
+    var playBtn = document.createElement('button');
+    playBtn.className = 'vc-play';
+    playBtn.innerHTML = '&#9654;';
+    playBtn.title = 'Preview voice';
+    playBtn.onclick = function(e) {
+      e.stopPropagation();
+      previewVoice(v, playBtn);
+    };
+
+    var info = document.createElement('div');
+    info.className = 'vc-info';
+    var name = document.createElement('div');
+    name.className = 'vc-name';
+    name.textContent = v.name;
+    var meta = document.createElement('div');
+    meta.className = 'vc-meta';
+    meta.textContent = v.description || 'No description';
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    var cat = document.createElement('span');
+    cat.className = 'vc-cat';
+    cat.textContent = v.category;
+
+    card.appendChild(playBtn);
+    card.appendChild(info);
+    card.appendChild(cat);
+
+    card.onclick = function() {
+      selectVoice(v.voice_id, v.name);
+      beepAction();
+    };
+
+    browser.appendChild(card);
+  });
+}
+
+function selectVoice(voiceId, voiceName) {
+  document.getElementById('cfg-eleven-voice').value = voiceId;
+  window.HUD_ELEVEN_VOICE = voiceId;
+
+  // Update card styling
+  var browser = document.getElementById('voice-browser');
+  browser.querySelectorAll('.voice-card').forEach(function(c) {
+    c.classList.toggle('selected', c.getAttribute('data-voice-id') === voiceId);
+  });
+
+  saveConfig();
+  toast('Voice set: ' + voiceName);
+}
+
+function previewVoice(voice, btn) {
+  // Stop any playing preview
+  if (_previewAudio) {
+    _previewAudio.pause();
+    _previewAudio = null;
+    document.querySelectorAll('.vc-play.playing').forEach(function(b) {
+      b.classList.remove('playing');
+      b.innerHTML = '&#9654;';
+    });
+  }
+
+  // If this button was already playing, just stop
+  if (btn.classList.contains('playing')) {
+    btn.classList.remove('playing');
+    btn.innerHTML = '&#9654;';
+    return;
+  }
+
+  // Use ElevenLabs preview_url if available (free, no API cost)
+  if (voice.preview_url) {
+    btn.classList.add('playing');
+    btn.innerHTML = '&#9632;';
+    beepNav();
+
+    _previewAudio = new Audio(voice.preview_url);
+    _previewAudio.onended = function() {
+      btn.classList.remove('playing');
+      btn.innerHTML = '&#9654;';
+      _previewAudio = null;
+    };
+    _previewAudio.onerror = function() {
+      btn.classList.remove('playing');
+      btn.innerHTML = '&#9654;';
+      _previewAudio = null;
+      toast('Preview unavailable');
+    };
+    _previewAudio.play();
+  } else {
+    toast('No preview available for this voice');
+  }
+}
+
 function testElevenLabs() {
   var key = document.getElementById('cfg-eleven-key').value;
-  var voice = getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL';
+  var voice = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
   if (!key) { toast('Enter an API key first'); return; }
 
   toast('Testing voice...');
   showWaveform('speaking');
 
-  // If in live mode, use server proxy. Otherwise, call ElevenLabs directly.
   if (window.HUD_LIVE) {
     fetch('/api/tts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text: 'LCARS system online. All ship systems are functioning within normal parameters.' }),
+      body: JSON.stringify({ text: 'LCARS system online. All ship systems are functioning within normal parameters.', voiceId: voice }),
     }).then(function(r) {
       if (!r.ok) throw new Error('TTS request failed');
       return r.blob();
@@ -1865,7 +2043,6 @@ function testElevenLabs() {
       toast('Test failed: ' + e.message);
     });
   } else {
-    // Direct call (may hit CORS issues)
     fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voice + '/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
@@ -1897,6 +2074,22 @@ setTimeout(function() {
     modeEl.textContent = window.HUD_LIVE ? 'LIVE' : 'STATIC';
     modeEl.style.color = window.HUD_LIVE ? 'var(--green)' : 'var(--dim)';
   }
+  // Restore last active tab
+  try {
+    var lastTab = localStorage.getItem('hud-tab');
+    if (lastTab) {
+      var sec = document.getElementById('s-' + lastTab);
+      if (sec) {
+        var btns = document.querySelectorAll('.nb');
+        for (var i = 0; i < btns.length; i++) {
+          if (btns[i].getAttribute('onclick') && btns[i].getAttribute('onclick').indexOf("'" + lastTab + "'") !== -1) {
+            nav(lastTab, btns[i]);
+            break;
+          }
+        }
+      }
+    }
+  } catch(e) {}
 }, 100);
 
 // Escape stops speech

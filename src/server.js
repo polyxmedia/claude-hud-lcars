@@ -160,17 +160,17 @@ const server = http.createServer(async (req, res) => {
 
   // ElevenLabs TTS proxy
   if (req.method === 'POST' && req.url === '/api/tts') {
-    if (!ELEVEN_KEY) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'ELEVENLABS_API_KEY not set' }));
-      return;
-    }
-
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { text, voiceId } = JSON.parse(body);
+        const { text, voiceId, apiKey } = JSON.parse(body);
+        const key = apiKey || ELEVEN_KEY;
+        if (!key) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No ElevenLabs API key' }));
+          return;
+        }
         const vid = voiceId || ELEVEN_VOICE;
 
         const ttsRes = await fetch(
@@ -179,7 +179,7 @@ const server = http.createServer(async (req, res) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'xi-api-key': ELEVEN_KEY,
+              'xi-api-key': key,
             },
             body: JSON.stringify({
               text: text.slice(0, 1000),

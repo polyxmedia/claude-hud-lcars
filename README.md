@@ -145,6 +145,6 @@ MIT
 
 ## Credits
 
-Built by [Andre Figueira](https://github.com/andrefigueira) with Claude Code.
+Built by [Andre Figueira](https://github.com/andrefigueira) ([@voidmode](https://x.com/voidmode)) at [polyxmedia.com](https://polyxmedia.com) with Claude Code.
 
 LCARS design inspired by Star Trek: The Next Generation. LCARS is a trademark of CBS Studios. This project is not affiliated with or endorsed by CBS Studios or Paramount.
