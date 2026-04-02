@@ -226,7 +226,7 @@ For display issues, a screenshot helps a lot.
 
 ## License
 
-MIT
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal and open source use, no commercial use permitted.
 
 ## Credits
 
