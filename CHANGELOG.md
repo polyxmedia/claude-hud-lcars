@@ -36,4 +36,3 @@ Free to use, modify, and share — commercial use not permitted.
 ## 2026-04-02 - fix dashboard: zoom, Q tab visibility, search highlight, auto-detect server
 
 ## 2026-04-02 - CLI: auto-open browser, --serve flag, --help
-
