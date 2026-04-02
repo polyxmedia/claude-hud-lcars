@@ -431,10 +431,18 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .computer-bar-send:hover{filter:brightness(1.3)}
 .computer-bar-send:disabled{opacity:0.4;cursor:default;filter:none}
 .computer-bar-toggles{
-  display:flex;align-items:center;gap:10px;padding:0 12px;background:#060608;
+  display:flex;align-items:center;gap:4px;padding:0 8px;background:#060608;
 }
-.computer-bar-toggles label{font-size:0.6rem;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
-.computer-bar-toggles input{accent-color:var(--orange)}
+.tgl-btn{
+  border:none;cursor:pointer;
+  font-family:'Antonio',sans-serif;font-size:0.72rem;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;
+  padding:6px 12px;color:var(--bg);transition:filter 0.12s,opacity 0.15s;
+  border-radius:12px;
+}
+.tgl-btn:hover{filter:brightness(1.2)}
+.tgl-btn.off{opacity:0.3}
+.tgl-btn.on{opacity:1}
 
 /* Computer response overlay */
 .computer-response{
@@ -627,8 +635,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   </div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
   <div class="computer-bar-toggles">
-    <label><input type="checkbox" id="voice-toggle"> VOICE</label>
-    <label><input type="checkbox" id="sound-toggle" checked> SFX</label>
+    <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleBtn(this)">VOICE</button>
+    <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
   </div>
 </div>
 
@@ -839,7 +847,7 @@ function getAudio() {
 }
 
 function lcarsBeep(freq, dur) {
-  if (!document.getElementById('sound-toggle').checked) return;
+  if (!isToggleOn('sound-toggle')) return;
   var ctx = getAudio();
   var osc = ctx.createOscillator();
   var gain = ctx.createGain();
@@ -851,6 +859,18 @@ function lcarsBeep(freq, dur) {
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + dur);
+}
+
+function toggleBtn(btn) {
+  var isOn = btn.classList.contains('on');
+  btn.classList.toggle('on', !isOn);
+  btn.classList.toggle('off', isOn);
+  lcarsBeep(isOn ? 600 : 1200, 0.06);
+}
+
+function isToggleOn(id) {
+  var btn = document.getElementById(id);
+  return btn && btn.classList.contains('on');
 }
 
 function beepNav() { lcarsBeep(1200, 0.08); }
@@ -867,7 +887,7 @@ open_ = function(k) { beepOpen(); _origOpen(k); };
 
 // ═══ VOICE OUTPUT (Web Speech API) ═══
 function speak(text) {
-  if (!document.getElementById('voice-toggle').checked) return;
+  if (!isToggleOn('voice-toggle')) return;
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   var u = new SpeechSynthesisUtterance(text.slice(0, 500));
