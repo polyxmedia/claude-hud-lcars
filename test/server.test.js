@@ -1,6 +1,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+
+function makeTmpDir() { return fs.mkdtempSync(path.join(os.tmpdir(), 'hud-srv-test-')); }
+function rimraf(dir) { fs.rmSync(dir, { recursive: true, force: true }); }
 
 // ── inlined from server.js ────────────────────────────────────────────────────
 
@@ -424,5 +430,173 @@ describe('escA', () => {
     const decoded = encoded.replace(/&quot;/g, '"');
     const parsed = JSON.parse(decoded);
     assert.equal(JSON.parse(parsed).command, 'npx');
+  });
+});
+
+// ── Marketplace path traversal protection ─────────────────────────────────────
+
+// Inlined from /api/marketplace/install security check in server.js
+function isAllowedMarketplacePath(sourcePath, allowedBase) {
+  const resolved = path.resolve(sourcePath);
+  return resolved.startsWith(allowedBase + path.sep);
+}
+
+describe('marketplace path traversal protection', () => {
+  test('allows path directly inside allowed base', () => {
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath(base + '/mkt/plugins/cool-plugin', base), true);
+  });
+
+  test('blocks path traversal above allowed base', () => {
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath(base + '/../../../etc/passwd', base), false);
+  });
+
+  test('blocks the allowed base directory itself (not a subdirectory)', () => {
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath(base, base), false);
+  });
+
+  test('blocks sibling directory with shared prefix', () => {
+    // e.g. /marketplaces-evil should not match /marketplaces
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath('/home/user/.claude/plugins/marketplaces-evil/x', base), false);
+  });
+
+  test('blocks absolute path to unrelated system location', () => {
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath('/etc/shadow', base), false);
+  });
+
+  test('allows deeply nested path inside allowed base', () => {
+    const base = '/home/user/.claude/plugins/marketplaces';
+    assert.equal(isAllowedMarketplacePath(base + '/a/b/c/d', base), true);
+  });
+});
+
+// ── install-remote settings merge ────────────────────────────────────────────
+
+// Inlined logic from /api/marketplace/install-remote in server.js
+function mergeRemoteMcp(settings, name, command, args) {
+  if (!settings.mcpServers) settings.mcpServers = {};
+  settings.mcpServers[name] = { command, args: args || [] };
+  return settings;
+}
+
+describe('install-remote settings merge', () => {
+  test('adds new server to empty settings', () => {
+    const s = mergeRemoteMcp({}, 'my-server', 'npx', ['-y', 'my-server']);
+    assert.deepEqual(s.mcpServers['my-server'], { command: 'npx', args: ['-y', 'my-server'] });
+  });
+
+  test('creates mcpServers key if missing', () => {
+    const s = mergeRemoteMcp({ otherKey: true }, 'srv', 'npx', []);
+    assert.ok('mcpServers' in s);
+  });
+
+  test('adds to existing mcpServers without removing others', () => {
+    const existing = { mcpServers: { 'existing': { command: 'node', args: ['./srv.js'] } } };
+    const s = mergeRemoteMcp(existing, 'new-server', 'npx', ['-y', 'new-server']);
+    assert.ok('existing' in s.mcpServers);
+    assert.ok('new-server' in s.mcpServers);
+  });
+
+  test('overwrites existing entry with same name', () => {
+    const existing = { mcpServers: { 'srv': { command: 'node', args: ['old.js'] } } };
+    const s = mergeRemoteMcp(existing, 'srv', 'npx', ['-y', 'srv']);
+    assert.equal(s.mcpServers['srv'].command, 'npx');
+    assert.deepEqual(s.mcpServers['srv'].args, ['-y', 'srv']);
+  });
+
+  test('defaults args to empty array when not provided', () => {
+    const s = mergeRemoteMcp({}, 'bare', 'uvx', undefined);
+    assert.deepEqual(s.mcpServers['bare'].args, []);
+  });
+
+  test('persists through a write/read cycle via tmp file', () => {
+    const tmp = makeTmpDir();
+    try {
+      const settingsPath = path.join(tmp, 'settings.json');
+      let settings = {};
+      settings = mergeRemoteMcp(settings, 'test-srv', 'npx', ['-y', 'test-srv']);
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+      const readBack = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      assert.equal(readBack.mcpServers['test-srv'].command, 'npx');
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── remote marketplace item normalization ─────────────────────────────────────
+
+// Inlined from /api/remote-marketplace in server.js
+function normalizeRemoteItem(name, description, source, sourceLabel) {
+  const shortName = name.includes('/') ? name.split('/').pop() : name;
+  return { id: source + ':' + name, name, shortName, description: description || '', type: 'mcp', source, sourceLabel, command: 'npx', args: ['-y', name] };
+}
+
+function deduplicateRemoteItems(rawItems) {
+  const seen = new Set();
+  const results = [];
+  for (const item of rawItems) {
+    if (!item.name || seen.has(item.name)) continue;
+    seen.add(item.name);
+    results.push(item);
+  }
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+describe('remote marketplace normalization', () => {
+  test('extracts shortName from scoped package', () => {
+    const item = normalizeRemoteItem('@scope/my-server', 'desc', 'npm', 'NPM');
+    assert.equal(item.shortName, 'my-server');
+  });
+
+  test('shortName equals name for unscoped package', () => {
+    const item = normalizeRemoteItem('plain-server', 'desc', 'npm', 'NPM');
+    assert.equal(item.shortName, 'plain-server');
+  });
+
+  test('id is source:name', () => {
+    const item = normalizeRemoteItem('@scope/srv', '', 'registry', 'MCP REGISTRY');
+    assert.equal(item.id, 'registry:@scope/srv');
+  });
+
+  test('type is always mcp', () => {
+    assert.equal(normalizeRemoteItem('any', '', 'npm', 'NPM').type, 'mcp');
+  });
+
+  test('command is npx and args include -y and name', () => {
+    const item = normalizeRemoteItem('@pkg/srv', '', 'npm', 'NPM');
+    assert.equal(item.command, 'npx');
+    assert.deepEqual(item.args, ['-y', '@pkg/srv']);
+  });
+
+  test('empty description defaults to empty string', () => {
+    assert.equal(normalizeRemoteItem('srv', null, 'npm', 'NPM').description, '');
+  });
+
+  test('deduplication removes items with duplicate names', () => {
+    const items = [
+      normalizeRemoteItem('srv-a', 'first', 'registry', 'REGISTRY'),
+      normalizeRemoteItem('srv-a', 'duplicate', 'npm', 'NPM'),
+      normalizeRemoteItem('srv-b', 'second', 'npm', 'NPM'),
+    ];
+    const deduped = deduplicateRemoteItems(items);
+    assert.equal(deduped.length, 2);
+    assert.equal(deduped.find(i => i.name === 'srv-a').description, 'first');
+  });
+
+  test('deduplication sorts result alphabetically', () => {
+    const items = ['zebra', 'apple', 'mango'].map(n => normalizeRemoteItem(n, '', 'npm', 'NPM'));
+    const deduped = deduplicateRemoteItems(items);
+    assert.deepEqual(deduped.map(i => i.name), ['apple', 'mango', 'zebra']);
+  });
+
+  test('deduplication skips items with empty name', () => {
+    const items = [
+      { name: '', description: '' },
+      normalizeRemoteItem('valid', '', 'npm', 'NPM'),
+    ];
+    assert.equal(deduplicateRemoteItems(items).length, 1);
   });
 });

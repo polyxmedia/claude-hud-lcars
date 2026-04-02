@@ -1012,6 +1012,331 @@ describe('getClaudeMdFiles', () => {
   });
 });
 
+// ── getMarketplaceItems ───────────────────────────────────────────────────────
+
+function getMarketplaceItems(claudeDir, installedMcpNames) {
+  const marketplaceDir = path.join(claudeDir, 'plugins', 'marketplaces');
+  if (!fs.existsSync(marketplaceDir)) return [];
+  const installedPlugins = new Set();
+  const pluginsRoot = path.join(claudeDir, 'plugins');
+  if (fs.existsSync(pluginsRoot)) {
+    for (const e of fs.readdirSync(pluginsRoot, { withFileTypes: true })) {
+      if (e.isDirectory() && e.name !== 'marketplaces') installedPlugins.add(e.name);
+    }
+  }
+  const items = [];
+  for (const mktEntry of fs.readdirSync(marketplaceDir, { withFileTypes: true })) {
+    if (!mktEntry.isDirectory()) continue;
+    const mktName = mktEntry.name;
+    const mktPath = path.join(marketplaceDir, mktName);
+    const pluginsDir = path.join(mktPath, 'plugins');
+    if (fs.existsSync(pluginsDir)) {
+      for (const pe of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
+        if (!pe.isDirectory() || pe.name === 'README.md') continue;
+        const pluginPath = path.join(pluginsDir, pe.name);
+        const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json');
+        let description = '', author = '';
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const m = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            description = m.description || '';
+            author = (m.author && m.author.name) ? m.author.name : '';
+          } catch(e) {}
+        }
+        if (!description) {
+          const readme = path.join(pluginPath, 'README.md');
+          if (fs.existsSync(readme)) {
+            try {
+              const txt = fs.readFileSync(readme, 'utf-8');
+              const lines = txt.split('\n').filter(l => l.trim() && !l.startsWith('#') && !l.startsWith('>') && !l.startsWith('!'));
+              description = (lines[0] || '').slice(0, 180);
+            } catch(e) {}
+          }
+        }
+        const caps = [];
+        if (fs.existsSync(path.join(pluginPath, 'skills'))) caps.push('skills');
+        if (fs.existsSync(path.join(pluginPath, 'agents'))) caps.push('agents');
+        if (fs.existsSync(path.join(pluginPath, 'hooks'))) caps.push('hooks');
+        if (fs.existsSync(path.join(pluginPath, '.mcp.json'))) caps.push('mcp');
+        if (fs.existsSync(path.join(pluginPath, 'commands'))) caps.push('commands');
+        items.push({ id: mktName + ':' + pe.name, name: pe.name, description, author, type: 'plugin',
+          marketplace: mktName, sourcePath: pluginPath, mcpConfig: null,
+          isInstalled: installedPlugins.has(pe.name), capabilities: caps });
+      }
+    }
+    const extDir = path.join(mktPath, 'external_plugins');
+    if (fs.existsSync(extDir)) {
+      for (const ee of fs.readdirSync(extDir, { withFileTypes: true })) {
+        if (!ee.isDirectory()) continue;
+        const extPath = path.join(extDir, ee.name);
+        const manifestPath = path.join(extPath, '.claude-plugin', 'plugin.json');
+        const mcpPath = path.join(extPath, '.mcp.json');
+        let description = '', author = '', mcpConfig = null;
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const m = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            description = m.description || '';
+            author = (m.author && m.author.name) ? m.author.name : '';
+          } catch(e) {}
+        }
+        if (fs.existsSync(mcpPath)) {
+          try { mcpConfig = JSON.parse(fs.readFileSync(mcpPath, 'utf-8')); } catch(e) {}
+        }
+        const mcpKeys = mcpConfig ? Object.keys(mcpConfig) : [];
+        const isInstalled = mcpKeys.length > 0 && mcpKeys.every(k => installedMcpNames.has(k));
+        items.push({ id: mktName + ':ext:' + ee.name, name: ee.name, description, author, type: 'mcp',
+          marketplace: mktName, sourcePath: extPath, mcpConfig, isInstalled, capabilities: ['mcp'] });
+      }
+    }
+  }
+  return items.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+describe('getMarketplaceItems', () => {
+  test('returns empty array when marketplaces dir does not exist', () => {
+    const tmp = makeTmpDir();
+    try { assert.deepEqual(getMarketplaceItems(tmp, new Set()), []); } finally { rimraf(tmp); }
+  });
+
+  test('returns empty array when marketplace dir is empty', () => {
+    const tmp = makeTmpDir();
+    try {
+      fs.mkdirSync(path.join(tmp, 'plugins', 'marketplaces'), { recursive: true });
+      assert.deepEqual(getMarketplaceItems(tmp, new Set()), []);
+    } finally { rimraf(tmp); }
+  });
+
+  test('parses a plugin with plugin.json manifest', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mymarket', 'plugins', 'cool-plugin', '.claude-plugin');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(path.join(pluginDir, 'plugin.json'), JSON.stringify({
+        name: 'cool-plugin', description: 'Does cool things', author: { name: 'Alice' }
+      }));
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items.length, 1);
+      assert.equal(items[0].name, 'cool-plugin');
+      assert.equal(items[0].description, 'Does cool things');
+      assert.equal(items[0].author, 'Alice');
+      assert.equal(items[0].type, 'plugin');
+      assert.equal(items[0].marketplace, 'mymarket');
+    } finally { rimraf(tmp); }
+  });
+
+  test('falls back to README.md for description when plugin.json absent', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'readme-plugin');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(path.join(pluginDir, 'README.md'), '# readme-plugin\n\nThis plugin does something useful.');
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items.length, 1);
+      assert.ok(items[0].description.includes('something useful'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('detects capability subdirectories', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'full-plugin');
+      fs.mkdirSync(path.join(pluginDir, 'skills'), { recursive: true });
+      fs.mkdirSync(path.join(pluginDir, 'agents'));
+      fs.mkdirSync(path.join(pluginDir, 'hooks'));
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.ok(items[0].capabilities.includes('skills'));
+      assert.ok(items[0].capabilities.includes('agents'));
+      assert.ok(items[0].capabilities.includes('hooks'));
+      assert.ok(!items[0].capabilities.includes('mcp'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('detects mcp capability when .mcp.json present in plugin', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'mcp-plugin');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(path.join(pluginDir, '.mcp.json'), JSON.stringify({ mcpServers: {} }));
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.ok(items[0].capabilities.includes('mcp'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('marks plugin as installed when same-named dir exists in plugins/', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'installed-plugin');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      // Simulate already installed
+      fs.mkdirSync(path.join(tmp, 'plugins', 'installed-plugin'), { recursive: true });
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items[0].isInstalled, true);
+    } finally { rimraf(tmp); }
+  });
+
+  test('marks plugin as not installed when absent from plugins/', () => {
+    const tmp = makeTmpDir();
+    try {
+      const pluginDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'not-installed');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items[0].isInstalled, false);
+    } finally { rimraf(tmp); }
+  });
+
+  test('parses external_plugins with .mcp.json config', () => {
+    const tmp = makeTmpDir();
+    try {
+      const extDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'external_plugins', 'gitnexus');
+      fs.mkdirSync(extDir, { recursive: true });
+      const mcpCfg = { gitnexus: { command: 'npx', args: ['gitnexus', 'mcp'] } };
+      fs.writeFileSync(path.join(extDir, '.mcp.json'), JSON.stringify(mcpCfg));
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items.length, 1);
+      assert.equal(items[0].type, 'mcp');
+      assert.deepEqual(items[0].mcpConfig, mcpCfg);
+      assert.ok(items[0].capabilities.includes('mcp'));
+    } finally { rimraf(tmp); }
+  });
+
+  test('marks external mcp as installed when all mcp keys present in installedMcpNames', () => {
+    const tmp = makeTmpDir();
+    try {
+      const extDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'external_plugins', 'myserver');
+      fs.mkdirSync(extDir, { recursive: true });
+      fs.writeFileSync(path.join(extDir, '.mcp.json'), JSON.stringify({ myserver: { command: 'npx', args: [] } }));
+      const items = getMarketplaceItems(tmp, new Set(['myserver']));
+      assert.equal(items[0].isInstalled, true);
+    } finally { rimraf(tmp); }
+  });
+
+  test('marks external mcp as not installed when keys missing from installedMcpNames', () => {
+    const tmp = makeTmpDir();
+    try {
+      const extDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'external_plugins', 'myserver');
+      fs.mkdirSync(extDir, { recursive: true });
+      fs.writeFileSync(path.join(extDir, '.mcp.json'), JSON.stringify({ myserver: { command: 'npx', args: [] } }));
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items[0].isInstalled, false);
+    } finally { rimraf(tmp); }
+  });
+
+  test('handles malformed plugin.json without crashing', () => {
+    const tmp = makeTmpDir();
+    try {
+      const manifestDir = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', 'bad-plugin', '.claude-plugin');
+      fs.mkdirSync(manifestDir, { recursive: true });
+      fs.writeFileSync(path.join(manifestDir, 'plugin.json'), 'NOT VALID JSON {{{');
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items.length, 1);
+      assert.equal(items[0].description, '');
+    } finally { rimraf(tmp); }
+  });
+
+  test('sorts items alphabetically by name across marketplaces', () => {
+    const tmp = makeTmpDir();
+    try {
+      for (const name of ['zebra', 'alpha', 'mango']) {
+        const d = path.join(tmp, 'plugins', 'marketplaces', 'mkt', 'plugins', name);
+        fs.mkdirSync(d, { recursive: true });
+      }
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.deepEqual(items.map(i => i.name), ['alpha', 'mango', 'zebra']);
+    } finally { rimraf(tmp); }
+  });
+
+  test('id includes marketplace name and plugin name', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'plugins', 'marketplaces', 'acme', 'plugins', 'my-tool');
+      fs.mkdirSync(d, { recursive: true });
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items[0].id, 'acme:my-tool');
+    } finally { rimraf(tmp); }
+  });
+
+  test('external plugin id includes :ext: segment', () => {
+    const tmp = makeTmpDir();
+    try {
+      const d = path.join(tmp, 'plugins', 'marketplaces', 'acme', 'external_plugins', 'ext-tool');
+      fs.mkdirSync(d, { recursive: true });
+      const items = getMarketplaceItems(tmp, new Set());
+      assert.equal(items[0].id, 'acme:ext:ext-tool');
+    } finally { rimraf(tmp); }
+  });
+});
+
+// ── hlJson (JSON syntax highlighter regression) ───────────────────────────────
+
+// Inlined from the client-side hlJson in the generated dashboard.
+// Tests that key spans don't corrupt class attribute quotes (the ordering bug).
+function hlJson(s) {
+  let h = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  h = h.replace(/"([^"]*)"/g, '<span class="str">"$1"</span>');
+  h = h.replace(/<span class="str">"([^"]*)"<\/span>(\s*):/g, '<span class="key">"$1"</span>$2:');
+  h = h.replace(/\b(true|false)\b/g, '<span class="bool">$1</span>');
+  h = h.replace(/\b(null)\b/g, '<span class="kw">$1</span>');
+  h = h.replace(/\b(-?\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+  return h;
+}
+
+describe('hlJson', () => {
+  test('wraps string values in str span', () => {
+    const result = hlJson('{ "key": "value" }');
+    assert.ok(result.includes('<span class="str">"value"</span>'));
+  });
+
+  test('wraps keys in key span', () => {
+    const result = hlJson('{ "command": "npx" }');
+    assert.ok(result.includes('<span class="key">"command"</span>'));
+  });
+
+  test('key span does not contain nested str span (ordering regression)', () => {
+    const result = hlJson('{ "command": "npx" }');
+    // Old buggy code produced: <span class="key"><span class="str">"command"</span></span>
+    assert.ok(!result.includes('<span class="key"><span class="str">'));
+  });
+
+  test('class attribute quotes are not wrapped as str spans', () => {
+    const result = hlJson('{ "cmd": "npx" }');
+    // Resulting HTML should not have class=<span... patterns
+    assert.ok(!result.includes('class=<span'));
+  });
+
+  test('colon appears after key span, not inside it', () => {
+    const result = hlJson('{ "args": [] }');
+    assert.ok(result.includes('</span>:'));
+  });
+
+  test('wraps booleans', () => {
+    const result = hlJson('{ "ok": true, "fail": false }');
+    assert.ok(result.includes('<span class="bool">true</span>'));
+    assert.ok(result.includes('<span class="bool">false</span>'));
+  });
+
+  test('wraps null', () => {
+    assert.ok(hlJson('{ "x": null }').includes('<span class="kw">null</span>'));
+  });
+
+  test('wraps numbers', () => {
+    assert.ok(hlJson('{ "port": 3200 }').includes('<span class="num">3200</span>'));
+  });
+
+  test('HTML-escapes < and > in values', () => {
+    const result = hlJson('{ "tag": "<script>" }');
+    assert.ok(!result.includes('<script>'));
+    assert.ok(result.includes('&lt;script&gt;'));
+  });
+
+  test('handles nested objects without corrupting output', () => {
+    const input = JSON.stringify({ a: { b: 'c' } }, null, 2);
+    assert.doesNotThrow(() => hlJson(input));
+    const result = hlJson(input);
+    assert.ok(result.includes('<span class="key">'));
+    assert.ok(result.includes('<span class="str">'));
+  });
+});
+
 // ── generated dashboard JS syntax ────────────────────────────────────────────
 
 describe('generated dashboard', () => {
