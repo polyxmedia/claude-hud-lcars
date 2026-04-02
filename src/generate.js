@@ -232,6 +232,63 @@ return `<!DOCTYPE html>
   --red:#CC4444;--green:#55CC55;--salmon:#FF9966;
 }
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;font-size:14px}
+/* ═══ BOOT SEQUENCE ═══ */
+.boot-overlay{
+  position:fixed;inset:0;z-index:9999;background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity 0.6s ease;
+}
+.boot-overlay.done{opacity:0;pointer-events:none}
+.boot-logo{width:80px;height:80px;margin-bottom:24px;opacity:0;animation:boot-fade-in 0.4s 0.2s forwards}
+.boot-title{
+  font-family:'Antonio',sans-serif;font-size:2.2rem;font-weight:700;
+  color:var(--orange);letter-spacing:0.12em;text-transform:uppercase;
+  opacity:0;animation:boot-fade-in 0.4s 0.5s forwards;
+}
+.boot-ship{
+  font-family:'Antonio',sans-serif;font-size:0.85rem;font-weight:500;
+  color:var(--dim);letter-spacing:0.2em;text-transform:uppercase;
+  margin-top:4px;opacity:0;animation:boot-fade-in 0.4s 0.7s forwards;
+}
+.boot-systems{
+  margin-top:32px;width:320px;display:flex;flex-direction:column;gap:6px;
+}
+.boot-sys{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--dim);
+  opacity:0;transform:translateX(-10px);
+}
+.boot-sys.on{opacity:1;transform:translateX(0);color:var(--text);transition:all 0.3s ease}
+.boot-sys .boot-dot{width:8px;height:8px;border-radius:50%;background:var(--dim);transition:background 0.3s}
+.boot-sys.on .boot-dot{background:var(--green)}
+.boot-bar{
+  width:320px;height:4px;background:#111;border-radius:2px;margin-top:20px;overflow:hidden;
+  opacity:0;animation:boot-fade-in 0.3s 0.4s forwards;
+}
+.boot-bar-fill{height:100%;width:0;background:var(--orange);border-radius:2px;transition:width 0.3s ease}
+.boot-status{
+  font-family:'Antonio',sans-serif;font-size:0.9rem;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--green);margin-top:16px;
+  opacity:0;
+}
+.boot-status.on{opacity:1;animation:boot-pulse 0.8s ease 2}
+@keyframes boot-fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes boot-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+/* ═══ ALERT SYSTEM ═══ */
+.alert-border{position:fixed;inset:0;pointer-events:none;z-index:90;border:3px solid transparent;transition:border-color 0.3s}
+.alert-border.red{border-color:var(--red);animation:alert-flash 0.8s infinite}
+.alert-border.yellow{border-color:var(--gold);animation:alert-flash 1.5s infinite}
+@keyframes alert-flash{0%,100%{opacity:1}50%{opacity:0.3}}
+.alert-badge{
+  position:fixed;top:8px;right:50%;transform:translateX(50%);z-index:91;
+  font-family:'Antonio',sans-serif;font-size:0.8rem;font-weight:700;
+  letter-spacing:0.2em;text-transform:uppercase;padding:4px 20px;
+  border-radius:0 0 12px 12px;display:none;
+}
+.alert-badge.red{display:block;background:var(--red);color:#000;animation:alert-flash 0.8s infinite}
+.alert-badge.yellow{display:block;background:var(--gold);color:#000;animation:alert-flash 1.5s infinite}
+.alert-badge.green{display:block;background:var(--green);color:#000}
 
 /* ═══ LCARS SCROLLBARS ═══ */
 *::-webkit-scrollbar{width:10px;height:10px}
@@ -307,7 +364,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 .sec{display:none}
 .sec.on{display:block}
-#s-viz.on{display:flex}
+#s-viz.on{display:flex;flex-direction:column;position:relative}
 
 .sec-h{
   position:sticky;top:0;z-index:5;background:#060608;
@@ -548,10 +605,32 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .comms{display:flex;flex-direction:column;height:100%;min-height:0}
 .comms-log{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
 .comms-msg{max-width:85%;line-height:1.7;font-size:0.88rem}
-.comms-msg.user{align-self:flex-end;background:rgba(153,153,255,0.1);border:1px solid rgba(153,153,255,0.2);padding:10px 14px;color:var(--blue)}
-.comms-msg.ai{align-self:flex-start;color:var(--text);padding:10px 0}
-.comms-msg.ai pre{background:#0a0a0c;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan)}
+.comms-msg.user{align-self:flex-end;background:rgba(153,153,255,0.08);border:1px solid rgba(153,153,255,0.15);border-right:3px solid var(--blue);padding:12px 16px;color:var(--blue);font-size:0.88rem}
+.comms-msg.ai{align-self:flex-start;color:var(--text);padding:14px 18px;background:rgba(255,153,0,0.03);border:1px solid #1a1a1e;border-left:3px solid var(--orange);max-width:90%;line-height:1.8}
+.comms-msg.ai h1,.comms-msg.ai h2,.comms-msg.ai h3{font-family:'Antonio',sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 8px;line-height:1.2}
+.comms-msg.ai h1{font-size:1.3rem;color:var(--peach);border-bottom:2px solid #1a1a1e;padding-bottom:6px}
+.comms-msg.ai h2{font-size:1.1rem;color:var(--peach)}
+.comms-msg.ai h3{font-size:0.95rem;color:var(--tan)}
+.comms-msg.ai p{margin-bottom:10px}
+.comms-msg.ai strong{color:#eee}
+.comms-msg.ai em{color:var(--lavender);font-style:italic}
+.comms-msg.ai pre{background:#0a0a0c;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan);position:relative}
+.comms-msg.ai pre::before{content:attr(data-lang);position:absolute;top:4px;right:8px;font-size:0.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em}
+.comms-msg.ai pre code{background:none;color:inherit;padding:0;font-size:inherit}
+.comms-msg.ai pre .kw{color:var(--blue)}
+.comms-msg.ai pre .str{color:var(--peach)}
+.comms-msg.ai pre .num{color:var(--orange)}
+.comms-msg.ai pre .key{color:var(--cyan)}
+.comms-msg.ai pre .bool{color:var(--salmon)}
+.comms-msg.ai pre .cmt{color:var(--dim);font-style:italic}
 .comms-msg.ai code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px;font-size:0.84rem}
+.comms-msg.ai ul,.comms-msg.ai ol{padding-left:22px;margin-bottom:10px}
+.comms-msg.ai li{margin-bottom:4px}
+.comms-msg.ai li::marker{color:var(--orange)}
+.comms-msg.ai table{width:100%;border-collapse:collapse;margin:10px 0;font-size:0.82rem}
+.comms-msg.ai td{padding:6px 8px;border-bottom:1px solid #1a1a1e}
+.comms-msg.ai blockquote{border-left:3px solid var(--tan);padding-left:14px;color:var(--dim);margin:10px 0}
+.comms-msg.ai a{color:var(--orange);text-decoration:none;border-bottom:1px solid rgba(255,153,0,0.3)}
 .comms-msg.err{color:var(--red);font-size:0.82rem;padding:8px 12px;border:1px solid rgba(204,68,68,0.2);background:rgba(204,68,68,0.05)}
 .comms-msg.sys{color:var(--dim);font-size:0.78rem;text-align:center;align-self:center}
 .comms-input{display:flex;gap:4px;padding:8px;border-top:2px solid #1a1a1e;background:#060608}
@@ -1059,6 +1138,27 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 @media(prefers-reduced-motion:reduce){*{transition-duration:0.01ms!important}}
 </style>
 </head><body>
+
+<div class="boot-overlay" id="boot">
+  <svg class="boot-logo" viewBox="0 0 200 200"><circle cx="100" cy="100" r="98" fill="#1a2a3a" stroke="#2a6496" stroke-width="3"/><circle cx="100" cy="100" r="92" fill="#0d1218"/><circle cx="100" cy="100" r="78" fill="#1e5a8a"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="#fff"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-10 100 94)"/><path d="M100 65 L102 69 L106 69 L103 72 L104 76 L100 74 L96 76 L97 72 L94 69 L98 69 Z" fill="#fff"/><path d="M39 86 L41 90 L45 90 L42 93 L43 97 L39 95 L35 97 L36 93 L33 90 L37 90 Z" fill="#fff"/><path d="M161 86 L163 90 L167 90 L164 93 L165 97 L161 95 L157 97 L158 93 L155 90 L159 90 Z" fill="#fff"/><path d="M59 118 L61 122 L65 122 L62 125 L63 129 L59 127 L55 129 L56 125 L53 122 L57 122 Z" fill="#fff"/><path d="M100 99 L102 103 L106 103 L103 106 L104 110 L100 108 L96 110 L97 106 L94 103 L98 103 Z" fill="#1e5a8a"/><path d="M49 109 Q75 85 105 94 Q130 100 150 105" fill="none" stroke="#cc2222" stroke-width="7" stroke-linecap="round"/></svg>
+  <div class="boot-title">LCARS</div>
+  <div class="boot-ship" id="boot-ship">STARFLEET COMMAND</div>
+  <div class="boot-systems" id="boot-systems">
+    <div class="boot-sys" data-delay="800"><span>Skill Modules</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="1100"><span>MCP Server Fleet</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="1400"><span>Hook Intercepts</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="1600"><span>Agent Roster</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="1800"><span>Memory Banks</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="2000"><span>Voice Subsystem</span><span class="boot-dot"></span></div>
+    <div class="boot-sys" data-delay="2200"><span>Communications</span><span class="boot-dot"></span></div>
+  </div>
+  <div class="boot-bar"><div class="boot-bar-fill" id="boot-bar-fill"></div></div>
+  <div class="boot-status" id="boot-status">ALL SYSTEMS NOMINAL</div>
+</div>
+
+<div class="alert-border" id="alert-border"></div>
+<div class="alert-badge" id="alert-badge"></div>
+
 <div class="lcars">
 
 <nav class="sb">
@@ -1085,7 +1185,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <div class="tb">
   <div class="tb-elbow"></div>
   <div class="tb-fill">
-    <span>MODEL: ${esc(S?.model||'DEFAULT')}</span>
+    <span id="tb-ship-name"></span>
     <span>ASSETS: ${String(skills.length+agents.length+mcp.length+hooks.length+plugins.length).padStart(3,'0')}</span>
     <span>SESSIONS: ${String(sessions).padStart(5,'0')}</span>
     <span style="display:flex;align-items:center;gap:6px"><svg viewBox="0 0 200 200" style="width:16px;height:16px"><circle cx="100" cy="100" r="98" fill="rgba(0,0,0,0.15)"/><circle cx="100" cy="100" r="78" fill="rgba(0,0,0,0.1)"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="rgba(0,0,0,0.25)"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="5" transform="rotate(-10 100 94)"/></svg>STARDATE ${stardate}</span>
@@ -1234,7 +1334,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>`).join('')}
       </div>
 
-      <div class="sec" id="s-viz" style="position:relative;display:flex;flex-direction:column">
+      <div class="sec" id="s-viz">
         <div class="tac-toolbar">
           <button class="tac-tab act" id="tac-tab-map" onclick="switchTac('map')">SYSTEMS MAP</button>
           <button class="tac-tab" id="tac-tab-ship" onclick="switchTac('ship')">ENTERPRISE</button>
@@ -1344,6 +1444,55 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           </div>
 
           <div class="cfg-section">
+            <div class="cfg-section-head">Ship Registry</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Designation</span>
+                <span class="cfg-desc">Name your workstation. Shows in the header and boot sequence.</span>
+                <span class="cfg-input"><input type="text" id="cfg-ship-name" placeholder="USS Enterprise" oninput="onShipNameChange()" maxlength="30"></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Registry</span>
+                <span class="cfg-desc">Ship registry number.</span>
+                <span class="cfg-input"><input type="text" id="cfg-ship-reg" placeholder="NCC-1701-D" oninput="onShipNameChange()" maxlength="16"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-head">Ship Theme</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Theme</span>
+                <span class="cfg-desc">Change the LCARS colour palette.</span>
+                <span class="cfg-input">
+                  <div class="lcars-select" id="cfg-theme-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-theme-wrap')"><span>Enterprise-D</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option selected" data-value="enterprise" onclick="selectLcarsOption('cfg-theme-wrap',this);onThemeChange()">
+                        <span class="opt-label">Enterprise-D</span>
+                        <span class="opt-sub">Classic TNG orange and blue</span>
+                      </div>
+                      <div class="lcars-option" data-value="defiant" onclick="selectLcarsOption('cfg-theme-wrap',this);onThemeChange()">
+                        <span class="opt-label">Defiant</span>
+                        <span class="opt-sub">Dark, aggressive. Red and grey.</span>
+                      </div>
+                      <div class="lcars-option" data-value="voyager" onclick="selectLcarsOption('cfg-theme-wrap',this);onThemeChange()">
+                        <span class="opt-label">Voyager</span>
+                        <span class="opt-sub">Blue-shifted. Cool and distant.</span>
+                      </div>
+                      <div class="lcars-option" data-value="discovery" onclick="selectLcarsOption('cfg-theme-wrap',this);onThemeChange()">
+                        <span class="opt-label">Discovery</span>
+                        <span class="opt-sub">Silver and blue. Modern Starfleet.</span>
+                      </div>
+                    </div>
+                  </div>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section">
             <div class="cfg-section-head">Sound Effects</div>
             <div class="cfg-section-body">
               <div class="cfg-row">
@@ -1385,8 +1534,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
       </div>
 
-      <div class="sec" id="s-about">
-        <div class="about">
+      <div class="sec" id="s-about" style="position:relative;overflow:hidden">
+        <canvas id="viewscreen" style="position:absolute;inset:0;width:100%;height:100%;z-index:0"></canvas>
+        <div class="about" style="position:relative;z-index:1">
           <div class="about-hero">
             <div style="text-align:center;margin-bottom:24px">
               <svg viewBox="0 0 200 200" style="width:120px;height:120px"><circle cx="100" cy="100" r="98" fill="#1a2a3a" stroke="#2a6496" stroke-width="3"/><circle cx="100" cy="100" r="92" fill="#0d1218"/><circle cx="100" cy="100" r="78" fill="#1e5a8a"/><path d="M100 26 L140 145 L100 124 L60 145 Z" fill="#fff"/><ellipse cx="100" cy="94" rx="63" ry="26" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-10 100 94)"/><path d="M100 65 L102 69 L106 69 L103 72 L104 76 L100 74 L96 76 L97 72 L94 69 L98 69 Z" fill="#fff"/><path d="M39 86 L41 90 L45 90 L42 93 L43 97 L39 95 L35 97 L36 93 L33 90 L37 90 Z" fill="#fff"/><path d="M161 86 L163 90 L167 90 L164 93 L165 97 L161 95 L157 97 L158 93 L155 90 L159 90 Z" fill="#fff"/><path d="M59 118 L61 122 L65 122 L62 125 L63 129 L59 127 L55 129 L56 125 L53 122 L57 122 Z" fill="#fff"/><path d="M100 99 L102 103 L106 103 L103 106 L104 110 L100 108 L96 110 L97 106 L94 103 L98 103 Z" fill="#1e5a8a"/><path d="M49 109 Q75 85 105 94 Q130 100 150 105" fill="none" stroke="#cc2222" stroke-width="7" stroke-linecap="round"/></svg>
@@ -1517,10 +1667,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <script>
 const D=${escJ(D)};
 const VIZ=${JSON.stringify({
-  skills: skills.map(s => ({ name: s.name, ver: s.ver, ctx: s.ctx })),
-  agents: agents.map(a => ({ name: a.name })),
-  mcp: mcp.map(m => ({ name: m.name, cmd: m.cmd })),
-  hooks: hooks.map(h => ({ ev: h.ev, matcher: h.matcher, type: h.type })),
+  skills: skills.map(s => ({ name: s.name, desc: (s.desc||'').slice(0,80), ver: s.ver, ctx: s.ctx })),
+  agents: agents.map(a => ({ name: a.name, desc: (a.desc||'').slice(0,80) })),
+  mcp: mcp.map(m => ({ name: m.name, cmd: m.cmd, args: m.args.join(' ').slice(0,60), serverType: m.serverType, envCount: m.envCount })),
+  hooks: hooks.map(h => ({ ev: h.ev, matcher: h.matcher, type: h.type, cmd: (h.cmd||'').slice(0,60), async: h.async })),
   plugins: plugins.map(p => ({ id: p.id, on: p.on })),
   env: Object.keys(env),
   mem: mem.map(m => ({ name: m.name, proj: m.proj, type: m.type })),
@@ -2460,6 +2610,17 @@ function loadConfig() {
       setLcarsValue('cfg-sfx-wrap', 'off');
       onSfxChange();
     }
+    if (cfg.shipName) {
+      var sn = document.getElementById('cfg-ship-name');
+      if (sn) sn.value = cfg.shipName;
+    }
+    if (cfg.shipReg) {
+      var sr = document.getElementById('cfg-ship-reg');
+      if (sr) sr.value = cfg.shipReg;
+    }
+    if (cfg.theme) {
+      setLcarsValue('cfg-theme-wrap', cfg.theme);
+    }
     updateElevenStatus();
     // Auto-load voice browser if we have a key
     var savedKey = document.getElementById('cfg-eleven-key').value;
@@ -2467,6 +2628,8 @@ function loadConfig() {
       _lastApiKey = savedKey;
       loadVoiceBrowser();
     }
+    applyShipName();
+    applyTheme();
   } catch(e) {}
   _loadingConfig = false;
 }
@@ -2479,6 +2642,9 @@ function saveConfig() {
     elevenVoice: document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL',
     sfx: getLcarsValue('cfg-sfx-wrap'),
     model: getLcarsValue('cfg-model-wrap') || 'claude-haiku-4-5-20251001',
+    shipName: (document.getElementById('cfg-ship-name') || {}).value || '',
+    shipReg: (document.getElementById('cfg-ship-reg') || {}).value || '',
+    theme: getLcarsValue('cfg-theme-wrap') || 'enterprise',
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
 }
@@ -3465,46 +3631,135 @@ function resetGraph() {
       }
     });
 
-    // Tooltip card for hovered leaf node
-    if (hoveredNode && !hoveredNode.isHub && hoveredNode.group !== 'core') {
+    // Info card for hovered node (leaf or hub)
+    if (hoveredNode && hoveredNode.group !== 'core') {
       ctx.restore();
       var col = COLORS[hoveredNode.group];
-      var tx = hoveredNode.x + W/2 + 20, ty = hoveredNode.y + H/2 + 14;
-      var boxW = 220, boxH = 52;
-      // Keep on screen
-      if (tx + boxW > W - 8) tx = hoveredNode.x + W/2 - boxW - 20;
-      if (ty + boxH > H - 8) ty = hoveredNode.y + H/2 - boxH - 14;
+      var detail = hoveredNode.detail || {};
+      var lines = [];
+      var titleFont = "700 13px 'Antonio', sans-serif";
+      var labelFont = "600 10px 'Antonio', sans-serif";
+      var valFont = "11px 'JetBrains Mono', monospace";
+      var hintFont = "10px 'JetBrains Mono', monospace";
 
-      // Background
-      ctx.fillStyle = '#0a0a0eee';
+      // Build info lines per type: [{label, value, color}]
+      if (hoveredNode.isHub) {
+        var catCount = hoveredNode.label.match(/\((\d+)\)/);
+        lines.push({ label: '', value: hoveredNode.label, font: titleFont, color: col });
+        lines.push({ label: 'SUBSYSTEM GROUP', value: '', font: labelFont, color: '#666' });
+      } else if (hoveredNode.group === 'skills') {
+        lines.push({ label: '', value: detail.name || hoveredNode.label, font: titleFont, color: col });
+        if (detail.desc) lines.push({ label: '', value: detail.desc, font: valFont, color: '#aaa', wrap: true });
+        var meta = [];
+        if (detail.ver) meta.push('v' + detail.ver);
+        if (detail.ctx) meta.push(detail.ctx);
+        if (meta.length) lines.push({ label: 'VERSION', value: meta.join('  //  '), font: valFont, color: '#888' });
+        lines.push({ label: '', value: 'Invoke: /' + (detail.name || '').toLowerCase().replace(/\s+/g, '-'), font: valFont, color: '#FF9900' });
+      } else if (hoveredNode.group === 'agents') {
+        lines.push({ label: '', value: detail.name || hoveredNode.label, font: titleFont, color: col });
+        if (detail.desc) lines.push({ label: '', value: detail.desc, font: valFont, color: '#aaa', wrap: true });
+      } else if (hoveredNode.group === 'mcp') {
+        lines.push({ label: '', value: detail.name || hoveredNode.label, font: titleFont, color: col });
+        lines.push({ label: 'CMD', value: detail.cmd || '?', font: valFont, color: '#aaa' });
+        if (detail.args) lines.push({ label: 'ARGS', value: detail.args, font: valFont, color: '#888' });
+        var mcpMeta = [];
+        if (detail.serverType && detail.serverType !== 'unknown') mcpMeta.push(detail.serverType.toUpperCase());
+        if (detail.envCount) mcpMeta.push(detail.envCount + ' env vars');
+        if (mcpMeta.length) lines.push({ label: 'TYPE', value: mcpMeta.join('  //  '), font: valFont, color: '#888' });
+      } else if (hoveredNode.group === 'hooks') {
+        lines.push({ label: '', value: detail.ev || hoveredNode.label, font: titleFont, color: col });
+        lines.push({ label: 'TYPE', value: (detail.type || '?').toUpperCase(), font: valFont, color: '#aaa' });
+        if (detail.matcher && detail.matcher !== '*') lines.push({ label: 'MATCH', value: detail.matcher, font: valFont, color: '#888' });
+        if (detail.cmd) lines.push({ label: 'CMD', value: detail.cmd, font: valFont, color: '#888' });
+        if (detail.async) lines.push({ label: 'MODE', value: 'ASYNC', font: valFont, color: '#66CCCC' });
+      } else if (hoveredNode.group === 'plugins') {
+        var pName = (detail.id || hoveredNode.label).split('/').pop();
+        lines.push({ label: '', value: pName, font: titleFont, color: col });
+        if (detail.id && detail.id.includes('/')) lines.push({ label: 'PKG', value: detail.id, font: valFont, color: '#888' });
+        lines.push({ label: 'STATUS', value: detail.on ? 'ENABLED' : 'DISABLED', font: valFont, color: detail.on ? '#55CC55' : '#CC4444' });
+      } else if (hoveredNode.group === 'env') {
+        lines.push({ label: '', value: detail.name || hoveredNode.label, font: titleFont, color: col });
+        lines.push({ label: 'TYPE', value: 'ENVIRONMENT VARIABLE', font: labelFont, color: '#888' });
+        lines.push({ label: '', value: 'value redacted', font: hintFont, color: '#444' });
+      } else if (hoveredNode.group === 'memory') {
+        lines.push({ label: '', value: detail.name || hoveredNode.label, font: titleFont, color: col });
+        if (detail.type) lines.push({ label: 'TYPE', value: detail.type.toUpperCase(), font: valFont, color: '#aaa' });
+        if (detail.proj) lines.push({ label: 'PROJECT', value: detail.proj, font: valFont, color: '#888' });
+      }
+
+      if (!hoveredNode.isHub) {
+        lines.push({ label: '', value: 'click to open \u25B8', font: hintFont, color: '#555', hint: true });
+      }
+
+      // Measure and layout
+      var lineH = 16, padX = 14, padY = 10, gap = 3;
+      var boxW = 260;
+
+      // Word wrap long description lines
+      var rendered = [];
+      lines.forEach(function(ln) {
+        if (ln.wrap && ln.value.length > 34) {
+          var words = ln.value.split(' '), cur = '';
+          words.forEach(function(w) {
+            if ((cur + ' ' + w).length > 34 && cur) { rendered.push({ label: '', value: cur, font: ln.font, color: ln.color }); cur = w; }
+            else cur = cur ? cur + ' ' + w : w;
+          });
+          if (cur) rendered.push({ label: '', value: cur, font: ln.font, color: ln.color });
+        } else {
+          rendered.push(ln);
+        }
+      });
+
+      var boxH = padY * 2 + rendered.length * (lineH + gap) - gap;
+      var tx = hoveredNode.x + W/2 + 24;
+      var ty = hoveredNode.y + H/2 - boxH/2;
+      if (tx + boxW > W - 12) tx = hoveredNode.x + W/2 - boxW - 24;
+      if (ty < 12) ty = 12;
+      if (ty + boxH > H - 12) ty = H - 12 - boxH;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.beginPath();
-      ctx.roundRect(tx - 10, ty - 6, boxW, boxH, 4);
+      ctx.roundRect(tx - padX + 3, ty - padY + 3, boxW, boxH, 6);
+      ctx.fill();
+      // Background
+      ctx.fillStyle = '#0c0c10f0';
+      ctx.beginPath();
+      ctx.roundRect(tx - padX, ty - padY, boxW, boxH, 6);
       ctx.fill();
       // Border
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = col + '88';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(tx - 10, ty - 6, boxW, boxH, 4);
+      ctx.roundRect(tx - padX, ty - padY, boxW, boxH, 6);
       ctx.stroke();
       // Left accent bar
       ctx.fillStyle = col;
-      ctx.fillRect(tx - 10, ty - 6, 4, boxH);
+      ctx.beginPath();
+      ctx.roundRect(tx - padX, ty - padY, 4, boxH, [6,0,0,6]);
+      ctx.fill();
+      // Top type badge
+      ctx.fillStyle = col + '20';
+      ctx.fillRect(tx - padX + 4, ty - padY, boxW - 4, 3);
 
-      // Type label
-      ctx.font = "700 12px 'Antonio', sans-serif";
-      ctx.fillStyle = col;
+      // Draw lines
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText((LABELS[hoveredNode.group] || '') + ' MODULE', tx + 2, ty + 2);
-      // Name
-      ctx.fillStyle = '#eee';
-      ctx.font = "500 12px 'JetBrains Mono', monospace";
-      var nameText = hoveredNode.label.length > 26 ? hoveredNode.label.slice(0,24)+'..' : hoveredNode.label;
-      ctx.fillText(nameText, tx + 2, ty + 20);
-      // Click hint
-      ctx.fillStyle = '#555';
-      ctx.font = "10px 'JetBrains Mono', monospace";
-      ctx.fillText('click to open', tx + 2, ty + 36);
+      var cy = ty;
+      rendered.forEach(function(ln) {
+        ctx.font = ln.font;
+        if (ln.label) {
+          ctx.fillStyle = '#555';
+          ctx.fillText(ln.label, tx, cy);
+          ctx.fillStyle = ln.color;
+          ctx.fillText(ln.value, tx + 52, cy);
+        } else {
+          ctx.fillStyle = ln.color;
+          var txt = ln.value.length > 36 ? ln.value.slice(0,34) + '..' : ln.value;
+          ctx.fillText(txt, tx, cy);
+        }
+        cy += lineH + gap;
+      });
     } else {
       ctx.restore();
     }
@@ -3794,6 +4049,271 @@ function resetGraph() {
   ].join('\\n');
 
   document.body.appendChild(modScript);
+})();
+
+// ═══ BOOT SEQUENCE ═══
+(function() {
+  var boot = document.getElementById('boot');
+  if (!boot) return;
+  // Load ship name for boot display
+  try {
+    var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
+    var shipEl = document.getElementById('boot-ship');
+    if (cfg.shipName && shipEl) {
+      shipEl.textContent = cfg.shipName + (cfg.shipReg ? ' // ' + cfg.shipReg : '');
+    }
+  } catch(e) {}
+
+  var systems = boot.querySelectorAll('.boot-sys');
+  var bar = document.getElementById('boot-bar-fill');
+  var status = document.getElementById('boot-status');
+  var total = systems.length;
+  var done = 0;
+
+  systems.forEach(function(sys) {
+    var delay = parseInt(sys.getAttribute('data-delay')) || 1000;
+    setTimeout(function() {
+      sys.classList.add('on');
+      done++;
+      bar.style.width = Math.round((done / total) * 100) + '%';
+      // Play a tiny beep
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.frequency.value = 1200 + done * 100;
+        g.gain.value = 0.03;
+        osc.start(); osc.stop(ctx.currentTime + 0.04);
+      } catch(e) {}
+    }, delay);
+  });
+
+  // Final status and dismiss
+  setTimeout(function() {
+    status.classList.add('on');
+    // Play the ready tone
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = 800;
+      g.gain.value = 0.06;
+      osc.start();
+      osc.frequency.setValueAtTime(1600, ctx.currentTime + 0.1);
+      osc.stop(ctx.currentTime + 0.2);
+    } catch(e) {}
+  }, 2600);
+
+  setTimeout(function() {
+    boot.classList.add('done');
+    setTimeout(function() { boot.remove(); }, 700);
+  }, 3200);
+})();
+
+// ═══ ALERT SYSTEM ═══
+function checkSystemHealth() {
+  var issues = [];
+  var warnings = [];
+
+  // Check for empty critical sections
+  if (VIZ.skills.length === 0) warnings.push('No skills registered');
+  if (VIZ.mcp.length === 0) warnings.push('No MCP servers configured');
+  if (VIZ.hooks.length === 0) warnings.push('No hooks active');
+
+  // Check MCP server health (from status checks if available)
+  var offlineServers = document.querySelectorAll('.mcp-card-status-label.offline');
+  if (offlineServers.length > 0) issues.push(offlineServers.length + ' MCP server(s) offline');
+
+  var border = document.getElementById('alert-border');
+  var badge = document.getElementById('alert-badge');
+
+  if (issues.length > 0) {
+    border.className = 'alert-border red';
+    badge.className = 'alert-badge red';
+    badge.textContent = 'RED ALERT';
+    // Play klaxon
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.value = 220;
+      g.gain.value = 0.08;
+      osc.start();
+      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.3);
+      osc.frequency.setValueAtTime(220, ctx.currentTime + 0.6);
+      osc.stop(ctx.currentTime + 0.9);
+    } catch(e) {}
+  } else if (warnings.length >= 2) {
+    border.className = 'alert-border yellow';
+    badge.className = 'alert-badge yellow';
+    badge.textContent = 'YELLOW ALERT';
+  } else {
+    border.className = 'alert-border';
+    badge.className = 'alert-badge green';
+    badge.textContent = 'CONDITION GREEN';
+    // Auto-hide green after 3s
+    setTimeout(function() {
+      badge.className = 'alert-badge';
+    }, 3000);
+  }
+}
+// Run health check after boot + MCP checks complete
+setTimeout(checkSystemHealth, 5000);
+
+// ═══ SHIP NAMING ═══
+function onShipNameChange() {
+  saveConfig();
+  applyShipName();
+}
+
+function applyShipName() {
+  try {
+    var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
+    var name = cfg.shipName || '';
+    var reg = cfg.shipReg || '';
+    var tbEl = document.getElementById('tb-ship-name');
+    if (tbEl) {
+      tbEl.textContent = name ? name + (reg ? ' // ' + reg : '') : 'CLAUDE HUD';
+    }
+    // Update sidebar subtitle
+    var sbSmall = document.querySelector('.sb-top small');
+    if (sbSmall && name) {
+      sbSmall.textContent = name + (reg ? ' ' + reg : '') + ' // LCARS';
+    }
+  } catch(e) {}
+}
+
+// ═══ SHIP THEMES ═══
+var THEMES = {
+  enterprise: {
+    orange:'#FF9900',peach:'#FFCC99',blue:'#9999FF',lavender:'#CC99CC',
+    tan:'#CC9966',salmon:'#FF9966',cyan:'#66CCCC',gold:'#FFCC66'
+  },
+  defiant: {
+    orange:'#CC3333',peach:'#CC6666',blue:'#666699',lavender:'#884466',
+    tan:'#886644',salmon:'#CC6644',cyan:'#448888',gold:'#AA8844'
+  },
+  voyager: {
+    orange:'#4488CC',peach:'#88AACC',blue:'#6688DD',lavender:'#8877AA',
+    tan:'#668899',salmon:'#5599AA',cyan:'#44AACC',gold:'#77AABB'
+  },
+  discovery: {
+    orange:'#8899AA',peach:'#AABBCC',blue:'#7799CC',lavender:'#9988AA',
+    tan:'#889999',salmon:'#99AABB',cyan:'#66AABB',gold:'#99AAAA'
+  }
+};
+
+function onThemeChange() {
+  saveConfig();
+  applyTheme();
+}
+
+function applyTheme() {
+  try {
+    var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
+    var theme = THEMES[cfg.theme] || THEMES.enterprise;
+    var root = document.documentElement.style;
+    root.setProperty('--orange', theme.orange);
+    root.setProperty('--peach', theme.peach);
+    root.setProperty('--blue', theme.blue);
+    root.setProperty('--lavender', theme.lavender);
+    root.setProperty('--tan', theme.tan);
+    root.setProperty('--salmon', theme.salmon);
+    root.setProperty('--cyan', theme.cyan);
+    root.setProperty('--gold', theme.gold);
+  } catch(e) {}
+}
+
+// ═══ BRIDGE VIEWSCREEN (Starfield) ═══
+(function() {
+  var vc, vctx, stars = [], vsAnim = null;
+  var STAR_COUNT = 200;
+
+  function initViewscreen() {
+    vc = document.getElementById('viewscreen');
+    if (!vc) return;
+    var sec = document.getElementById('s-about');
+    var rect = sec.getBoundingClientRect();
+    vc.width = rect.width * devicePixelRatio;
+    vc.height = rect.height * devicePixelRatio;
+    vc.style.width = rect.width + 'px';
+    vc.style.height = rect.height + 'px';
+    vctx = vc.getContext('2d');
+    vctx.scale(devicePixelRatio, devicePixelRatio);
+
+    var W = rect.width, H = rect.height;
+    stars = [];
+    for (var i = 0; i < STAR_COUNT; i++) {
+      stars.push({
+        x: Math.random() * W - W/2,
+        y: Math.random() * H - H/2,
+        z: Math.random() * 1000,
+        size: Math.random() * 1.5 + 0.5,
+      });
+    }
+
+    function drawStars() {
+      vctx.fillStyle = 'rgba(0,0,3,0.25)';
+      vctx.fillRect(0, 0, W, H);
+
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        s.z -= 1.5;
+        if (s.z <= 0) {
+          s.x = Math.random() * W - W/2;
+          s.y = Math.random() * H - H/2;
+          s.z = 1000;
+        }
+        var sx = (s.x / s.z) * 300 + W/2;
+        var sy = (s.y / s.z) * 300 + H/2;
+        var r = (1 - s.z / 1000) * s.size * 2;
+        var brightness = 1 - s.z / 1000;
+
+        if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
+
+        vctx.beginPath();
+        vctx.arc(sx, sy, Math.max(r, 0.5), 0, Math.PI * 2);
+        vctx.fillStyle = 'rgba(200,210,255,' + (brightness * 0.8) + ')';
+        vctx.fill();
+
+        // Streak effect for close stars
+        if (s.z < 200) {
+          var prevSx = (s.x / (s.z + 8)) * 300 + W/2;
+          var prevSy = (s.y / (s.z + 8)) * 300 + H/2;
+          vctx.beginPath();
+          vctx.moveTo(prevSx, prevSy);
+          vctx.lineTo(sx, sy);
+          vctx.strokeStyle = 'rgba(200,210,255,' + (brightness * 0.3) + ')';
+          vctx.lineWidth = r * 0.5;
+          vctx.stroke();
+        }
+      }
+      vsAnim = requestAnimationFrame(drawStars);
+    }
+    drawStars();
+  }
+
+  // Hook into nav to start/stop viewscreen
+  var _origNavVS = nav;
+  nav = function(id, el) {
+    _origNavVS(id, el);
+    if (id === 'about') {
+      if (!vc) initViewscreen();
+      else if (!vsAnim) {
+        var drawStars = function() {
+          // Re-init on re-visit
+          initViewscreen();
+        };
+        drawStars();
+      }
+    } else {
+      if (vsAnim) { cancelAnimationFrame(vsAnim); vsAnim = null; }
+    }
+  };
 })();
 </script>
 </body></html>`;
