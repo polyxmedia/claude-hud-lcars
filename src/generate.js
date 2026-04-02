@@ -301,6 +301,43 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .emp{padding:16px 20px;color:var(--faint);font-size:0.88rem}
 .emp::before{content:'-- '}
 
+/* ═══ MCP SUBSYSTEM CARDS ═══ */
+.mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px;padding:12px}
+.mcp-card{
+  background:#060608;border:1px solid #1a1a1e;position:relative;
+  padding:14px 16px;cursor:pointer;transition:background 0.12s,border-color 0.15s;
+}
+.mcp-card:hover{background:#0c0c10;border-color:#2a2a30}
+.mcp-card.sel{border-color:var(--orange);background:rgba(255,153,0,0.04)}
+.mcp-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.mcp-card-status{
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+  background:var(--green);box-shadow:0 0 6px var(--green);
+}
+.mcp-card-name{
+  font-family:'Antonio',sans-serif;font-size:1rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.06em;color:var(--text);
+  flex:1;
+}
+.mcp-card-cat{
+  font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;
+  padding:2px 8px;background:rgba(153,153,255,0.1);color:var(--blue);
+  flex-shrink:0;
+}
+.mcp-card-body{display:flex;flex-direction:column;gap:4px}
+.mcp-card-row{display:flex;gap:8px;font-size:0.75rem;line-height:1.5}
+.mcp-card-label{color:var(--dim);min-width:56px;text-transform:uppercase;font-size:0.6rem;letter-spacing:0.08em;padding-top:2px}
+.mcp-card-val{color:var(--text);word-break:break-all}
+.mcp-card-bar{
+  height:3px;background:#1a1a1e;margin-top:10px;position:relative;overflow:hidden;
+}
+.mcp-card-bar::after{
+  content:'';position:absolute;top:0;left:0;height:100%;width:100%;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));
+  animation:mcp-pulse 2s ease-in-out infinite;
+}
+@keyframes mcp-pulse{0%,100%{transform:translateX(-100%)}50%{transform:translateX(0)}}
+
 /* ═══ DETAIL PANEL (PADD) ═══ */
 .dp{background:#08080a;overflow-y:auto;min-height:0;opacity:0;transition:opacity 0.2s;border-left:4px solid var(--orange);position:relative}
 .mn-content.open .dp{opacity:1}
@@ -784,13 +821,29 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-mcp">
-        <div class="sec-h">MCP Server Fleet</div>
-        ${mcp.length===0?'<div class="emp">No servers connected</div>':mcp.map(s=>`
-        <div class="r" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}">
-          <span class="r-id">${esc(s.name)}</span>
-          <span class="r-tg"><span class="tg tg-g">${esc(s.cmd)}</span>${s.hasEnv?'<span class="tg tg-t">env</span>':''}</span>
-          <span class="r-d">${esc(s.args.join(' '))}</span>
-        </div>`).join('')}
+        <div class="sec-h">Subsystem Status // MCP Fleet</div>
+        ${mcp.length===0?'<div class="emp">No servers connected</div>':`
+        <div class="mcp-grid">
+          ${mcp.map(s=>`
+          <div class="mcp-card" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}">
+            <div class="mcp-card-top">
+              <div class="mcp-card-status"></div>
+              <div class="mcp-card-name">${esc(s.name)}</div>
+              ${s.hasEnv?'<span class="mcp-card-cat">ENV</span>':''}
+            </div>
+            <div class="mcp-card-body">
+              <div class="mcp-card-row">
+                <span class="mcp-card-label">CMD</span>
+                <span class="mcp-card-val">${esc(s.cmd)}</span>
+              </div>
+              ${s.args.length?`<div class="mcp-card-row">
+                <span class="mcp-card-label">ARGS</span>
+                <span class="mcp-card-val" style="color:var(--dim)">${esc(s.args.join(' '))}</span>
+              </div>`:''}
+            </div>
+            <div class="mcp-card-bar"></div>
+          </div>`).join('')}
+        </div>`}
       </div>
 
       <div class="sec" id="s-hooks">
