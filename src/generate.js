@@ -423,10 +423,17 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .cfg-section-body{padding:16px}
 .cfg-row{
   display:flex;align-items:center;gap:12px;
-  padding:10px 0;border-bottom:1px solid #111;
+  padding:12px 0;border-bottom:1px solid #111;
   font-size:0.85rem;
 }
 .cfg-row:last-child{border-bottom:none}
+.cfg-row-stack{
+  display:flex;flex-direction:column;gap:8px;
+  padding:12px 0;border-bottom:1px solid #111;
+  font-size:0.85rem;
+}
+.cfg-row-stack:last-child{border-bottom:none}
+.cfg-row-stack .cfg-label{margin-bottom:2px}
 .cfg-label{
   min-width:160px;font-weight:600;color:var(--text);
   flex-shrink:0;
@@ -435,7 +442,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   flex:1;font-size:0.78rem;color:var(--dim);line-height:1.5;
 }
 .cfg-input{
-  width:280px;flex-shrink:0;
+  width:360px;flex-shrink:0;
+}
+.cfg-input-wide{
+  width:100%;flex-shrink:0;grid-column:1/-1;margin-top:4px;
 }
 .cfg-input input,.cfg-input select{
   width:100%;background:#0a0a0c;border:1px solid #222;color:var(--text);
@@ -722,7 +732,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="sb-top">
     <div style="display:flex;align-items:center;gap:10px">
       <svg viewBox="0 0 40 48" style="width:28px;height:34px;flex-shrink:0"><path d="M20 2 L34 44 L20 35 L6 44 Z" fill="#000" opacity="0.3"/><path d="M20 4 L32 42 L20 34 L8 42 Z" fill="#000"/><circle cx="20" cy="18" r="3" fill="#FF9900" opacity="0.6"/></svg>
-      <h1>Claude<br>HUD</h1>
+      <h1 style="cursor:pointer" onclick="document.querySelector('.nb').click()">Claude<br>HUD</h1>
     </div>
     <small>LCARS INTERFACE // ${stardate}</small>
   </div>
@@ -870,16 +880,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                   <span class="cfg-desc">Get yours from <a href="https://elevenlabs.io" target="_blank" style="color:var(--orange)">elevenlabs.io</a></span>
                   <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onApiKeyChange()"></span>
                 </div>
-                <div class="cfg-row">
+                <div class="cfg-row-stack">
                   <span class="cfg-label">Voice</span>
                   <span class="cfg-desc">Browse your available voices. Click the play button to preview, click the row to select.</span>
-                  <span class="cfg-input" style="width:100%">
-                    <div id="voice-browser-container">
-                      <div class="voice-loading" id="voice-browser-loading">Enter API key to load voices</div>
-                      <div class="voice-browser" id="voice-browser" style="display:none"></div>
-                    </div>
-                    <input type="hidden" id="cfg-eleven-voice" value="EXAVITQu4vr4xnSDxMaL">
-                  </span>
+                  <div id="voice-browser-container" style="width:100%">
+                    <div class="voice-loading" id="voice-browser-loading">Enter API key to load voices</div>
+                    <div class="voice-browser" id="voice-browser" style="display:none"></div>
+                  </div>
+                  <input type="hidden" id="cfg-eleven-voice" value="EXAVITQu4vr4xnSDxMaL">
                 </div>
                 <div class="cfg-row">
                   <span class="cfg-label">Status</span>
@@ -1132,19 +1140,19 @@ function md(t) {
     } catch(e) {}
   }
 
-  // Markdown rendering
-  let h = esc(t);
+  // Extract fenced code blocks from RAW text BEFORE escaping
   const codeBlocks = [];
-
-  // Extract fenced code blocks first to protect them
   const BT = String.fromCharCode(96);
   const fenceRx = new RegExp(BT+BT+BT+'(\\\\w*)\\\\n([\\\\s\\\\S]*?)'+BT+BT+BT, 'g');
-  h = h.replace(fenceRx, (_, lang, code) => {
-    const idx = codeBlocks.length;
-    const highlighted = hlCode(code.replace(new RegExp('\\\\n$'), ''), lang || '');
+  var raw = t.replace(fenceRx, function(_, lang, code) {
+    var idx = codeBlocks.length;
+    var highlighted = hlCode(code.replace(new RegExp('\\\\n$'), ''), lang || '');
     codeBlocks.push('<pre data-lang="' + (lang || 'code') + '"><code>' + highlighted + '</code></pre>');
     return '%%CODEBLOCK' + idx + '%%';
   });
+
+  // Now escape the remaining text (code blocks are already safe as placeholders)
+  var h = esc(raw);
 
   // Inline code
   const inlineRx = new RegExp(BT+'([^'+BT+']+)'+BT, 'g');
