@@ -1727,6 +1727,17 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           </div>
 
           <div class="cfg-section">
+            <div class="cfg-section-head">Workspace</div>
+            <div class="cfg-section-body">
+              <div class="cfg-row">
+                <span class="cfg-label">Projects Directory</span>
+                <span class="cfg-desc">Path to your projects folder (e.g. ~/Code). LCARS will scan it and use your projects as context in chat.</span>
+                <span class="cfg-input"><input type="text" id="cfg-projects-dir" placeholder="~/Code" oninput="onProjectsDirChange()"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section">
             <div class="cfg-section-head">Ship Theme</div>
             <div class="cfg-section-body">
               <div class="cfg-row">
@@ -2900,6 +2911,11 @@ function loadConfig() {
       var sr = document.getElementById('cfg-ship-reg');
       if (sr) sr.value = cfg.shipReg;
     }
+    if (cfg.projectsDir) {
+      var pd = document.getElementById('cfg-projects-dir');
+      if (pd) pd.value = cfg.projectsDir;
+      window.HUD_PROJECTS_DIR = cfg.projectsDir;
+    }
     if (cfg.theme) {
       setLcarsValue('cfg-theme-wrap', cfg.theme);
     }
@@ -2926,6 +2942,7 @@ function saveConfig() {
     model: getLcarsValue('cfg-model-wrap') || 'claude-haiku-4-5-20251001',
     shipName: (document.getElementById('cfg-ship-name') || {}).value || '',
     shipReg: (document.getElementById('cfg-ship-reg') || {}).value || '',
+    projectsDir: (document.getElementById('cfg-projects-dir') || {}).value || '',
     theme: getLcarsValue('cfg-theme-wrap') || 'enterprise',
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
@@ -3601,13 +3618,15 @@ function sendGlobal() {
   var activeBlockIdx = -1;
   var seenEvents = {};
 
-  fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001' }),
-  }).then(function(res) {
-    if (!res.ok) {
-      return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
+  function doChat(extraContext) {
+    var systemExtra = extraContext ? '\n\nActive missions (projects in ' + window.HUD_PROJECTS_DIR + '):\n' + extraContext : '';
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chatHistory, model: window.HUD_MODEL || 'claude-haiku-4-5-20251001', systemExtra: systemExtra }),
+    }).then(function(res) {
+      if (!res.ok) {
+        return res.json().then(function(e) { throw new Error(e.error || 'API error'); });
     }
 
     var reader = res.body.getReader();
@@ -3676,6 +3695,19 @@ function sendGlobal() {
     btn.disabled = false;
     btn.textContent = 'SEND';
   });
+  }
+
+  if (window.HUD_LIVE && window.HUD_PROJECTS_DIR) {
+    fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: window.HUD_PROJECTS_DIR }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      doChat(d.projects ? d.projects.join(', ') : '');
+    }).catch(function() { doChat(''); });
+  } else {
+    doChat('');
+  }
 }
 
 // ═══ UNIVERSAL SEARCH ═══
@@ -4430,6 +4462,12 @@ setTimeout(checkSystemHealth, 5000);
 function onShipNameChange() {
   saveConfig();
   applyShipName();
+}
+
+function onProjectsDirChange() {
+  var val = (document.getElementById('cfg-projects-dir') || {}).value || '';
+  window.HUD_PROJECTS_DIR = val;
+  saveConfig();
 }
 
 function applyShipName() {
