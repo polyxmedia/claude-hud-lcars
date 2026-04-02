@@ -460,6 +460,39 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   padding:3px 10px;cursor:pointer;letter-spacing:0.08em;
   border-radius:10px;margin-left:8px;
 }
+/* ═══ IN-HUD EDITOR ═══ */
+.hud-editor{display:none;flex-direction:column;height:100%;min-height:0}
+.hud-editor.active{display:flex}
+.hud-editor-toolbar{
+  display:flex;align-items:center;gap:4px;padding:10px 20px;
+  border-bottom:2px solid #1a1a1e;background:#060608;
+}
+.hud-editor-toolbar .editor-path{
+  flex:1;font-size:0.75rem;color:var(--dim);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+.hud-editor-toolbar .editor-save{
+  background:var(--green);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:6px 16px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:12px;transition:filter 0.12s;
+}
+.hud-editor-toolbar .editor-save:hover{filter:brightness(1.2)}
+.hud-editor-toolbar .editor-cancel{
+  background:var(--tan);border:none;color:var(--bg);
+  font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:6px 14px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+  border-radius:12px;transition:filter 0.12s;
+}
+.hud-editor-toolbar .editor-cancel:hover{filter:brightness(1.2)}
+.hud-editor textarea{
+  flex:1;background:#050506;border:none;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.85rem;
+  line-height:1.7;padding:16px 20px;resize:none;outline:none;
+  tab-size:2;white-space:pre;overflow:auto;
+}
+.hud-editor textarea:focus{background:#080809}
+
 .computer-response h1,.computer-response h2,.computer-response h3{font-family:'Antonio',sans-serif;text-transform:uppercase;color:var(--peach);margin:16px 0 8px}
 .computer-response code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px}
 .computer-response pre{background:#000;border-left:3px solid var(--blue);padding:12px;margin:8px 0;overflow-x:auto;font-size:0.82rem;color:var(--cyan)}
@@ -648,6 +681,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
       <div class="dp-actions" id="dp-actions"></div>
       <div class="dp-b" id="dp-b"></div>
+      <div class="hud-editor" id="hud-editor">
+        <div class="hud-editor-toolbar">
+          <span class="editor-path" id="editor-path"></span>
+          <button class="editor-save" onclick="saveFile()">SAVE</button>
+          <button class="editor-cancel" onclick="closeEditor()">CANCEL</button>
+        </div>
+        <textarea id="editor-textarea" spellcheck="false"></textarea>
+      </div>
     </div>
   </div>
 </div>
@@ -670,12 +711,11 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <div class="computer-bar-input">
     <textarea id="cb-in" placeholder="Ask the computer anything..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobal()}"></textarea>
   </div>
-  <button class="mic-btn" id="mic-btn" onclick="toggleMic()">MIC</button>
   <span class="waveform-label hidden" id="wf-label"></span>
   <div class="waveform hidden" id="waveform"></div>
   <button class="computer-bar-send" id="cb-send" onclick="sendGlobal()">SEND</button>
   <div class="computer-bar-toggles">
-    <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleBtn(this)">VOICE</button>
+    <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleVoice(this)">VOICE</button>
     <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
   </div>
 </div>
@@ -737,17 +777,9 @@ function doAction(btn){
   var icon=btn.getAttribute('data-icon');
   beepAction();
 
-  if(icon==='EDIT' && window.HUD_LIVE){
-    // Extract file path from "open /path/to/file"
+  if(icon==='EDIT'){
     var filePath = cmd.replace(/^open\\s+/, '');
-    fetch('/api/open', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({path: filePath}),
-    }).then(function(r){ return r.json() }).then(function(d){
-      if(d.ok) toast('Opened: ' + filePath.split('/').pop());
-      else toast('Error: ' + d.error);
-    }).catch(function(e){ toast('Error: ' + e.message); });
+    openEditor(filePath);
     return;
   }
 
@@ -1110,6 +1142,122 @@ speak = function(text) {
   u.onend = function() { hideWaveform(); };
   u.onerror = function() { hideWaveform(); };
   speechSynthesis.speak(u);
+};
+
+// ═══ IN-HUD EDITOR ═══
+var currentEditPath = '';
+
+function openEditor(filePath) {
+  if (window.HUD_LIVE) {
+    // Fetch file content from server
+    fetch('/api/open', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: filePath, readOnly: true}),
+    });
+  }
+  // The file body is already in the detail data, use it
+  var textarea = document.getElementById('editor-textarea');
+  var dpBody = document.getElementById('dp-b');
+  var editor = document.getElementById('hud-editor');
+  // Find the raw content from the current detail
+  var currentKey = document.querySelector('.r.sel');
+  var key = currentKey ? currentKey.getAttribute('data-k') : null;
+  var rawContent = key && D[key] ? D[key].b : '';
+
+  textarea.value = rawContent;
+  currentEditPath = filePath;
+  document.getElementById('editor-path').textContent = filePath;
+
+  dpBody.style.display = 'none';
+  document.getElementById('dp-actions').style.display = 'none';
+  editor.classList.add('active');
+  textarea.focus();
+  beepOpen();
+}
+
+function closeEditor() {
+  document.getElementById('hud-editor').classList.remove('active');
+  document.getElementById('dp-b').style.display = '';
+  document.getElementById('dp-actions').style.display = '';
+  currentEditPath = '';
+  beepNav();
+}
+
+function saveFile() {
+  if (!currentEditPath) return;
+  var content = document.getElementById('editor-textarea').value;
+
+  if (window.HUD_LIVE) {
+    fetch('/api/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: currentEditPath, content: content}),
+    }).then(function(r){ return r.json() }).then(function(d){
+      if (d.ok) {
+        toast('SAVED: ' + currentEditPath.split('/').pop());
+        beepAction();
+        // Update the in-memory data
+        var currentKey = document.querySelector('.r.sel');
+        var key = currentKey ? currentKey.getAttribute('data-k') : null;
+        if (key && D[key]) {
+          D[key].b = content;
+        }
+        closeEditor();
+        // Re-render the detail view with updated content
+        if (key) open_(key);
+      } else {
+        toast('SAVE FAILED: ' + d.error);
+      }
+    }).catch(function(e){
+      toast('SAVE ERROR: ' + e.message);
+    });
+  } else {
+    toast('SAVE REQUIRES LIVE MODE (node src/server.js)');
+  }
+}
+
+// ═══ UNIFIED VOICE TOGGLE ═══
+function toggleVoice(btn) {
+  var wasOn = btn.classList.contains('on');
+  btn.classList.toggle('on', !wasOn);
+  btn.classList.toggle('off', wasOn);
+  lcarsBeep(wasOn ? 600 : 1200, 0.06);
+
+  if (!wasOn) {
+    // Voice mode ON, start listening immediately
+    toast('VOICE MODE ACTIVE');
+    startListening();
+  } else {
+    // Voice mode OFF
+    stopMic();
+    stopSpeaking();
+  }
+}
+
+function startListening() {
+  if (!isToggleOn('voice-toggle')) return;
+  if (micActive) return;
+  startMic();
+}
+
+// Auto-restart listening after computer finishes speaking (voice conversation loop)
+var _origSpeakForLoop = speak;
+speak = function(text) {
+  _origSpeakForLoop(text);
+  // After speech ends, restart listening if voice mode still on
+  if (window.speechSynthesis && isToggleOn('voice-toggle')) {
+    var checkDone = setInterval(function() {
+      if (!speechSynthesis.speaking) {
+        clearInterval(checkDone);
+        setTimeout(function() {
+          if (isToggleOn('voice-toggle') && !micActive) {
+            startListening();
+          }
+        }, 500);
+      }
+    }, 200);
+  }
 };
 
 // Interrupt speech on any user action
