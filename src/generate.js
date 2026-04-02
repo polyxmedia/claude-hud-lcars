@@ -458,7 +458,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 
 .sec{display:none}
 .sec.on{display:block}
-#s-viz.on{display:flex;flex-direction:column;position:relative}
+#s-q.on{display:flex;flex-direction:column;height:100%;background:#050508}
+#s-viz.on{display:flex;flex-direction:column;position:relative;height:100%}
 
 .sec-h{
   position:sticky;top:0;z-index:5;background:#060608;
@@ -1451,7 +1452,13 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-env">
-        <div class="sec-h">Environment Variables</div>
+        <div class="sec-h"><span>Environment Variables</span><button class="sec-h-new" onclick="toggleCreate('env')">+ NEW</button></div>
+        <div class="create-form" id="cf-env">
+          <h3>Add Environment Variable</h3>
+          <div class="cf-row"><label>Key</label><input id="cf-env-key" placeholder="VARIABLE_NAME" style="text-transform:uppercase"></div>
+          <div class="cf-row"><label>Value</label><input id="cf-env-val" placeholder="value"></div>
+          <div class="cf-actions"><button class="cf-create" onclick="createEnv()">SET</button><button class="cf-cancel" onclick="toggleCreate('env')">CANCEL</button></div>
+        </div>
         ${Object.keys(env).length===0?'<div class="emp">No env overrides</div>':Object.entries(env).map(([k,v])=>`
         <div class="r r2" onclick="open_('v:${esc(k)}')" data-k="v:${esc(k)}">
           <span class="r-id">${esc(k)}</span>
@@ -1513,7 +1520,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
       </div>
 
-      <div class="sec" id="s-q" style="display:flex;flex-direction:column;height:100%;background:#050508">
+      <div class="sec" id="s-q">
         <div style="padding:20px 24px;border-bottom:2px solid var(--red)">
           <div style="font-family:Antonio,sans-serif;font-size:1.4rem;color:var(--red);letter-spacing:0.08em;text-transform:uppercase">Q Continuum</div>
           <div style="font-size:0.7rem;color:var(--dim);margin-top:4px;letter-spacing:0.06em">An audience with the omnipotent. Proceed at your own risk.</div>
@@ -3275,6 +3282,26 @@ function createAgent() {
   }).catch(function(e) { toast('ERROR: ' + e.message); });
 }
 
+function createEnv() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var key = document.getElementById('cf-env-key').value.trim().toUpperCase();
+  var val = document.getElementById('cf-env-val').value.trim();
+  if (!key) { toast('Variable name required'); return; }
+
+  fetch('/api/settings-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ type: 'add-env', key: key, value: val }),
+  }).then(function(r) { return r.json() }).then(function(d) {
+    if (d.ok) {
+      toast('ENV SET: ' + key);
+      beepAction();
+      toggleCreate('env');
+      setTimeout(function() { location.reload(); }, 500);
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e) { toast('ERROR: ' + e.message); });
+}
+
 // ═══ MCP STATUS CHECK ═══
 function checkMcpStatus() {
   var labels = {
@@ -3586,8 +3613,10 @@ function onSearch() {
   results.innerHTML = matches.slice(0, 30).map(function(m) {
     var col = typeColors[m.type] || '#888';
     var sec = sectionMap[m.type] || 'skills';
-    var highlighted = esc(m.snippet).replace(new RegExp('(' + m.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
-    return '<div class="sr" onclick="searchGo(\''+m.key+'\',\''+sec+'\')"><span class="sr-type" style="color:'+col+'">'+m.type+'</span><span class="sr-name">'+esc(m.title)+'</span><span class="sr-match">'+highlighted+'</span></div>';
+    var highlighted = esc(m.snippet);
+    var qi = highlighted.toLowerCase().indexOf(m.q.toLowerCase());
+    if (qi >= 0) { highlighted = highlighted.slice(0, qi) + '<mark>' + highlighted.slice(qi, qi + m.q.length) + '</mark>' + highlighted.slice(qi + m.q.length); }
+    return '<div class="sr" onclick="searchGo(&apos;'+m.key+'&apos;,&apos;'+sec+'&apos;)"><span class="sr-type" style="color:'+col+'">'+m.type+'</span><span class="sr-name">'+esc(m.title)+'</span><span class="sr-match">'+highlighted+'</span></div>';
   }).join('');
 }
 

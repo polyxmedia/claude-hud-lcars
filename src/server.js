@@ -122,6 +122,9 @@ const server = http.createServer(async (req, res) => {
         if (update.type === 'add-mcp') {
           if (!settings.mcpServers) settings.mcpServers = {};
           settings.mcpServers[update.name] = update.config;
+        } else if (update.type === 'add-env') {
+          if (!settings.env) settings.env = {};
+          settings.env[update.key] = update.value;
         } else if (update.type === 'add-hook') {
           if (!settings.hooks) settings.hooks = {};
           if (!settings.hooks[update.event]) settings.hooks[update.event] = [];
