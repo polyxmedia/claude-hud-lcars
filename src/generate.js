@@ -869,7 +869,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 <div class="stb">
   <div class="stb-edge"></div>
   <div class="stb-inner">
-    ${sections.map(s => `<div class="st"><div class="st-n">${String(s.count).padStart(3,'0')}</div><div class="st-l">${s.label}</div></div>`).join('\n    ')}
+    ${sections.filter(s => s.count !== null).map(s => `<div class="st"><div class="st-n">${String(s.count).padStart(3,'0')}</div><div class="st-l">${s.label}</div></div>`).join('\n    ')}
   </div>
 </div>
 
@@ -884,7 +884,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <h3>Create New Skill</h3>
           <div class="cf-row"><label>Name</label><input id="cf-skill-name" placeholder="my-skill"></div>
           <div class="cf-row"><label>Description</label><input id="cf-skill-desc" placeholder="What this skill does..."></div>
-          <div class="cf-row"><label>Context</label><select id="cf-skill-ctx"><option value="fork">Fork (isolated)</option><option value="inline">Inline (in conversation)</option></select></div>
+          <div class="cf-row"><label>Context</label><span style="flex:1"><div class="lcars-select" id="cf-skill-ctx-wrap"><button class="lcars-select-btn" onclick="toggleLcarsSelect('cf-skill-ctx-wrap')"><span>Fork (isolated)</span></button><div class="lcars-dropdown"><div class="lcars-option selected" data-value="fork" onclick="selectLcarsOption('cf-skill-ctx-wrap',this)"><span class="opt-label">Fork (isolated)</span><span class="opt-sub">Runs in a subagent, separate context</span></div><div class="lcars-option" data-value="inline" onclick="selectLcarsOption('cf-skill-ctx-wrap',this)"><span class="opt-label">Inline (in conversation)</span><span class="opt-sub">Runs in main conversation context</span></div></div></div></span></div>
           <div class="cf-row"><label>Content</label><textarea id="cf-skill-body" placeholder="# My Skill\n\nSkill instructions here..."></textarea></div>
           <div class="cf-actions"><button class="cf-create" onclick="createSkill()">CREATE</button><button class="cf-cancel" onclick="toggleCreate('skill')">CANCEL</button></div>
         </div>
@@ -934,9 +934,9 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         <div class="sec-h"><span>Hook Intercepts</span><button class="sec-h-new" onclick="toggleCreate('hook')">+ NEW</button></div>
         <div class="create-form" id="cf-hook">
           <h3>Create New Hook</h3>
-          <div class="cf-row"><label>Event</label><select id="cf-hook-event"><option>PreToolUse</option><option>PostToolUse</option><option>Stop</option><option>SessionStart</option><option>SessionEnd</option><option>UserPromptSubmit</option><option>SubagentStop</option><option>Notification</option></select></div>
+          <div class="cf-row"><label>Event</label><span style="flex:1"><div class="lcars-select" id="cf-hook-event-wrap"><button class="lcars-select-btn" onclick="toggleLcarsSelect('cf-hook-event-wrap')"><span>PreToolUse</span></button><div class="lcars-dropdown"><div class="lcars-option selected" data-value="PreToolUse" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">PreToolUse</span><span class="opt-sub">Before a tool executes</span></div><div class="lcars-option" data-value="PostToolUse" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">PostToolUse</span><span class="opt-sub">After successful execution</span></div><div class="lcars-option" data-value="Stop" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">Stop</span><span class="opt-sub">When Claude stops responding</span></div><div class="lcars-option" data-value="SessionStart" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">SessionStart</span><span class="opt-sub">Session begins</span></div><div class="lcars-option" data-value="UserPromptSubmit" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">UserPromptSubmit</span><span class="opt-sub">User submits a prompt</span></div><div class="lcars-option" data-value="SubagentStop" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">SubagentStop</span><span class="opt-sub">Subagent finishes</span></div><div class="lcars-option" data-value="Notification" onclick="selectLcarsOption('cf-hook-event-wrap',this)"><span class="opt-label">Notification</span><span class="opt-sub">System notification fires</span></div></div></div></span></div>
           <div class="cf-row"><label>Matcher</label><input id="cf-hook-matcher" placeholder="Bash (optional, for tool events)"></div>
-          <div class="cf-row"><label>Type</label><select id="cf-hook-type"><option value="command">Shell Command</option><option value="prompt">LLM Prompt</option><option value="http">HTTP Webhook</option><option value="agent">Agent Verifier</option></select></div>
+          <div class="cf-row"><label>Type</label><span style="flex:1"><div class="lcars-select" id="cf-hook-type-wrap"><button class="lcars-select-btn" onclick="toggleLcarsSelect('cf-hook-type-wrap')"><span>Shell Command</span></button><div class="lcars-dropdown"><div class="lcars-option selected" data-value="command" onclick="selectLcarsOption('cf-hook-type-wrap',this)"><span class="opt-label">Shell Command</span><span class="opt-sub">Execute a shell script</span></div><div class="lcars-option" data-value="prompt" onclick="selectLcarsOption('cf-hook-type-wrap',this)"><span class="opt-label">LLM Prompt</span><span class="opt-sub">Evaluate with an LLM</span></div><div class="lcars-option" data-value="http" onclick="selectLcarsOption('cf-hook-type-wrap',this)"><span class="opt-label">HTTP Webhook</span><span class="opt-sub">POST to a URL</span></div><div class="lcars-option" data-value="agent" onclick="selectLcarsOption('cf-hook-type-wrap',this)"><span class="opt-label">Agent Verifier</span><span class="opt-sub">Spawn a verification agent</span></div></div></div></span></div>
           <div class="cf-row"><label>Command</label><textarea id="cf-hook-cmd" placeholder="echo 'hook fired'"></textarea></div>
           <div class="cf-actions"><button class="cf-create" onclick="createHook()">CREATE</button><button class="cf-cancel" onclick="toggleCreate('hook')">CANCEL</button></div>
         </div>
@@ -2284,7 +2284,7 @@ function createSkill() {
   if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
   var name = document.getElementById('cf-skill-name').value.trim();
   var desc = document.getElementById('cf-skill-desc').value.trim();
-  var ctx = document.getElementById('cf-skill-ctx').value;
+  var ctx = getLcarsValue('cf-skill-ctx-wrap') || 'fork';
   var body = document.getElementById('cf-skill-body').value;
   if (!name) { toast('Name required'); return; }
 
@@ -2332,9 +2332,9 @@ function createMcp() {
 
 function createHook() {
   if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
-  var event = document.getElementById('cf-hook-event').value;
+  var event = getLcarsValue('cf-hook-event-wrap') || 'PreToolUse';
   var matcher = document.getElementById('cf-hook-matcher').value.trim();
-  var type = document.getElementById('cf-hook-type').value;
+  var type = getLcarsValue('cf-hook-type-wrap') || 'command';
   var cmd = document.getElementById('cf-hook-cmd').value.trim();
   if (!cmd) { toast('Command/prompt required'); return; }
 
