@@ -444,8 +444,67 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 .cfg-input input:focus,.cfg-input select:focus{border-color:var(--orange)}
 .cfg-input input::placeholder{color:var(--faint)}
-.cfg-input select{appearance:none;cursor:pointer}
-.cfg-input select option{background:#0a0a0c;color:var(--text)}
+/* Custom LCARS select */
+.lcars-select{position:relative;width:100%}
+.lcars-select-btn{
+  width:100%;background:#0a0a0c;border:1px solid #222;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  padding:8px 12px;text-align:left;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+  transition:border-color 0.15s;
+}
+.lcars-select-btn:hover{border-color:var(--orange)}
+.lcars-select-btn::after{
+  content:'';width:0;height:0;
+  border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:5px solid var(--orange);flex-shrink:0;margin-left:8px;
+}
+.lcars-select-btn.open{border-color:var(--orange)}
+.lcars-select-btn.open::after{border-top:none;border-bottom:5px solid var(--orange)}
+.lcars-dropdown{
+  display:none;position:absolute;top:100%;left:0;right:0;z-index:20;
+  background:#0a0a0c;border:1px solid var(--orange);border-top:none;
+  max-height:200px;overflow-y:auto;
+}
+.lcars-dropdown.open{display:block}
+.lcars-option{
+  padding:8px 12px;cursor:pointer;font-size:0.82rem;
+  font-family:'JetBrains Mono',monospace;color:var(--text);
+  transition:background 0.1s;
+}
+.lcars-option:hover{background:rgba(255,153,0,0.08)}
+.lcars-option.selected{color:var(--orange);font-weight:600}
+.lcars-option .opt-label{display:block}
+.lcars-option .opt-sub{display:block;font-size:0.7rem;color:var(--dim);margin-top:2px}
+/* Voice browser */
+.voice-browser{max-height:320px;overflow-y:auto;border:1px solid #222;background:#050508;margin-top:8px}
+.voice-browser::-webkit-scrollbar{width:6px}
+.voice-browser::-webkit-scrollbar-thumb{background:var(--orange);border-radius:3px}
+.voice-card{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  border-bottom:1px solid #151518;cursor:pointer;transition:background 0.1s;
+}
+.voice-card:last-child{border-bottom:none}
+.voice-card:hover{background:rgba(255,153,0,0.06)}
+.voice-card.selected{background:rgba(255,153,0,0.1);border-left:3px solid var(--orange)}
+.voice-card .vc-play{
+  flex-shrink:0;width:32px;height:32px;border-radius:50%;
+  background:transparent;border:2px solid var(--blue);color:var(--blue);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:0.7rem;transition:all 0.15s;
+}
+.voice-card .vc-play:hover{background:var(--blue);color:#000}
+.voice-card .vc-play.playing{border-color:var(--salmon);color:var(--salmon);animation:pulse-glow 1s infinite}
+.voice-card .vc-play.playing:hover{background:var(--salmon);color:#000}
+.voice-card .vc-info{flex:1;min-width:0}
+.voice-card .vc-name{font-family:Antonio,sans-serif;font-size:0.9rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text)}
+.voice-card .vc-meta{font-size:0.65rem;color:var(--dim);margin-top:2px;letter-spacing:0.03em}
+.voice-card .vc-cat{
+  flex-shrink:0;font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:8px;background:rgba(153,153,255,0.12);color:var(--blue);
+}
+.voice-loading{padding:20px;text-align:center;color:var(--dim);font-size:0.8rem;letter-spacing:0.06em}
+@keyframes pulse-glow{0%,100%{opacity:1}50%{opacity:0.5}}
 .cfg-status{
   display:inline-flex;align-items:center;gap:6px;
   font-size:0.75rem;letter-spacing:0.06em;margin-top:4px;
@@ -783,10 +842,19 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-label">Engine</span>
                 <span class="cfg-desc">Browser voice is free. ElevenLabs gives you a realistic AI voice with low latency streaming.</span>
                 <span class="cfg-input">
-                  <select id="cfg-voice-engine" onchange="onVoiceEngineChange()">
-                    <option value="browser">Browser (Free)</option>
-                    <option value="elevenlabs">ElevenLabs (Premium)</option>
-                  </select>
+                  <div class="lcars-select" id="cfg-voice-engine-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-voice-engine-wrap')"><span>Browser (Free)</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option selected" data-value="browser" onclick="selectLcarsOption('cfg-voice-engine-wrap',this);onVoiceEngineChange()">
+                        <span class="opt-label">Browser (Free)</span>
+                        <span class="opt-sub">Built-in Web Speech API, no setup needed</span>
+                      </div>
+                      <div class="lcars-option" data-value="elevenlabs" onclick="selectLcarsOption('cfg-voice-engine-wrap',this);onVoiceEngineChange()">
+                        <span class="opt-label">ElevenLabs (Premium)</span>
+                        <span class="opt-sub">Realistic AI voice, low latency streaming</span>
+                      </div>
+                    </div>
+                  </div>
                 </span>
               </div>
               <div id="cfg-eleven-fields" style="display:none">
@@ -796,9 +864,39 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                   <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onCfgChange()"></span>
                 </div>
                 <div class="cfg-row">
-                  <span class="cfg-label">Voice ID</span>
-                  <span class="cfg-desc">Default is "Sarah" (professional, clear). Browse voices at ElevenLabs.</span>
-                  <span class="cfg-input"><input type="text" id="cfg-eleven-voice" placeholder="EXAVITQu4vr4xnSDxMaL" oninput="onCfgChange()"></span>
+                  <span class="cfg-label">Voice</span>
+                  <span class="cfg-desc">Pick a voice character for the LCARS computer.</span>
+                  <span class="cfg-input">
+                    <div class="lcars-select" id="cfg-eleven-voice-wrap">
+                      <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-eleven-voice-wrap')"><span>Sarah (Clear, Professional)</span></button>
+                      <div class="lcars-dropdown">
+                        <div class="lcars-option selected" data-value="EXAVITQu4vr4xnSDxMaL" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Sarah</span>
+                          <span class="opt-sub">Clear, professional female. Closest to LCARS computer.</span>
+                        </div>
+                        <div class="lcars-option" data-value="21m00Tcm4TlvDq8ikWAM" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Rachel</span>
+                          <span class="opt-sub">Warm, calm female. Conversational and measured.</span>
+                        </div>
+                        <div class="lcars-option" data-value="XrExE9yKIg1WjnnlVkGX" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Matilda</span>
+                          <span class="opt-sub">Warm, friendly female. Slightly lower register.</span>
+                        </div>
+                        <div class="lcars-option" data-value="pFZP5JQG7iQjIQuC4Bku" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Lily</span>
+                          <span class="opt-sub">British female. Precise, authoritative.</span>
+                        </div>
+                        <div class="lcars-option" data-value="onwK4e9ZLuTAKqWW03F9" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Daniel</span>
+                          <span class="opt-sub">Deep British male. Commanding, like a captain's log narrator.</span>
+                        </div>
+                        <div class="lcars-option" data-value="N2lVS1w4EtoT3dr4eOWO" onclick="selectLcarsOption('cfg-eleven-voice-wrap',this);onCfgChange()">
+                          <span class="opt-label">Callum</span>
+                          <span class="opt-sub">Intense male. Steady, focused delivery.</span>
+                        </div>
+                      </div>
+                    </div>
+                  </span>
                 </div>
                 <div class="cfg-row">
                   <span class="cfg-label">Status</span>
@@ -832,10 +930,17 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-label">LCARS Beeps</span>
                 <span class="cfg-desc">Synthesized sound effects on navigation, actions, and communication.</span>
                 <span class="cfg-input">
-                  <select id="cfg-sfx" onchange="onSfxChange()">
-                    <option value="on">Enabled</option>
-                    <option value="off">Disabled</option>
-                  </select>
+                  <div class="lcars-select" id="cfg-sfx-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-sfx-wrap')"><span>Enabled</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option selected" data-value="on" onclick="selectLcarsOption('cfg-sfx-wrap',this);onSfxChange()">
+                        <span class="opt-label">Enabled</span>
+                      </div>
+                      <div class="lcars-option" data-value="off" onclick="selectLcarsOption('cfg-sfx-wrap',this);onSfxChange()">
+                        <span class="opt-label">Disabled</span>
+                      </div>
+                    </div>
+                  </div>
                 </span>
               </div>
             </div>
@@ -1603,25 +1708,79 @@ document.addEventListener('click', function(e) {
 // Typing stops speech
 document.getElementById('cb-in').addEventListener('input', stopSpeaking);
 
+// ═══ LCARS CUSTOM SELECTS ═══
+function toggleLcarsSelect(id) {
+  var wrap = document.getElementById(id);
+  var btn = wrap.querySelector('.lcars-select-btn');
+  var dd = wrap.querySelector('.lcars-dropdown');
+  var isOpen = dd.classList.contains('open');
+  // Close all others
+  document.querySelectorAll('.lcars-dropdown.open').forEach(function(d){d.classList.remove('open')});
+  document.querySelectorAll('.lcars-select-btn.open').forEach(function(b){b.classList.remove('open')});
+  if (!isOpen) {
+    dd.classList.add('open');
+    btn.classList.add('open');
+    beepNav();
+  }
+}
+
+function selectLcarsOption(id, opt) {
+  var wrap = document.getElementById(id);
+  wrap.querySelectorAll('.lcars-option').forEach(function(o){o.classList.remove('selected')});
+  opt.classList.add('selected');
+  wrap.querySelector('.lcars-select-btn span').textContent = opt.querySelector('.opt-label').textContent;
+  wrap.querySelector('.lcars-dropdown').classList.remove('open');
+  wrap.querySelector('.lcars-select-btn').classList.remove('open');
+  beepAction();
+}
+
+function getLcarsValue(id) {
+  var wrap = document.getElementById(id);
+  if (!wrap) return '';
+  var sel = wrap.querySelector('.lcars-option.selected');
+  return sel ? sel.getAttribute('data-value') : '';
+}
+
+function setLcarsValue(id, val) {
+  var wrap = document.getElementById(id);
+  if (!wrap) return;
+  var opts = wrap.querySelectorAll('.lcars-option');
+  opts.forEach(function(o) {
+    if (o.getAttribute('data-value') === val) {
+      o.classList.add('selected');
+      wrap.querySelector('.lcars-select-btn span').textContent = o.querySelector('.opt-label').textContent;
+    } else {
+      o.classList.remove('selected');
+    }
+  });
+}
+
+// Close selects on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.lcars-select')) {
+    document.querySelectorAll('.lcars-dropdown.open').forEach(function(d){d.classList.remove('open')});
+    document.querySelectorAll('.lcars-select-btn.open').forEach(function(b){b.classList.remove('open')});
+  }
+});
+
 // ═══ CONFIG PANEL ═══
 function loadConfig() {
   try {
     var cfg = JSON.parse(localStorage.getItem('hud-config') || '{}');
     if (cfg.voiceEngine === 'elevenlabs') {
-      var sel = document.getElementById('cfg-voice-engine');
-      if (sel) { sel.value = 'elevenlabs'; onVoiceEngineChange(); }
+      setLcarsValue('cfg-voice-engine-wrap', 'elevenlabs');
+      onVoiceEngineChange();
     }
     if (cfg.elevenKey) {
       var inp = document.getElementById('cfg-eleven-key');
       if (inp) inp.value = cfg.elevenKey;
     }
     if (cfg.elevenVoice) {
-      var inp2 = document.getElementById('cfg-eleven-voice');
-      if (inp2) inp2.value = cfg.elevenVoice;
+      setLcarsValue('cfg-eleven-voice-wrap', cfg.elevenVoice);
     }
     if (cfg.sfx === 'off') {
-      var sfx = document.getElementById('cfg-sfx');
-      if (sfx) { sfx.value = 'off'; onSfxChange(); }
+      setLcarsValue('cfg-sfx-wrap', 'off');
+      onSfxChange();
     }
     updateElevenStatus();
   } catch(e) {}
@@ -1629,10 +1788,10 @@ function loadConfig() {
 
 function saveConfig() {
   var cfg = {
-    voiceEngine: document.getElementById('cfg-voice-engine').value,
+    voiceEngine: getLcarsValue('cfg-voice-engine-wrap'),
     elevenKey: document.getElementById('cfg-eleven-key').value,
-    elevenVoice: document.getElementById('cfg-eleven-voice').value,
-    sfx: document.getElementById('cfg-sfx').value,
+    elevenVoice: getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL',
+    sfx: getLcarsValue('cfg-sfx-wrap'),
   };
   localStorage.setItem('hud-config', JSON.stringify(cfg));
 }
@@ -1643,7 +1802,7 @@ function onCfgChange() {
 }
 
 function onVoiceEngineChange() {
-  var engine = document.getElementById('cfg-voice-engine').value;
+  var engine = getLcarsValue('cfg-voice-engine-wrap');
   var fields = document.getElementById('cfg-eleven-fields');
   fields.style.display = engine === 'elevenlabs' ? 'block' : 'none';
   saveConfig();
@@ -1651,7 +1810,7 @@ function onVoiceEngineChange() {
 }
 
 function onSfxChange() {
-  var val = document.getElementById('cfg-sfx').value;
+  var val = getLcarsValue('cfg-sfx-wrap');
   var btn = document.getElementById('sound-toggle');
   if (btn) {
     btn.classList.toggle('on', val === 'on');
@@ -1670,7 +1829,7 @@ function updateElevenStatus() {
     // Set flag so speak() uses ElevenLabs
     window.HUD_ELEVENLABS = true;
     window.HUD_ELEVEN_KEY = key;
-    window.HUD_ELEVEN_VOICE = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
+    window.HUD_ELEVEN_VOICE = getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL';
   } else {
     el.innerHTML = '<span class="cfg-dot off"></span> NOT CONFIGURED';
     el.className = 'cfg-status offline';
@@ -1680,7 +1839,7 @@ function updateElevenStatus() {
 
 function testElevenLabs() {
   var key = document.getElementById('cfg-eleven-key').value;
-  var voice = document.getElementById('cfg-eleven-voice').value || 'EXAVITQu4vr4xnSDxMaL';
+  var voice = getLcarsValue('cfg-eleven-voice-wrap') || 'EXAVITQu4vr4xnSDxMaL';
   if (!key) { toast('Enter an API key first'); return; }
 
   toast('Testing voice...');

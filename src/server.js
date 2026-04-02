@@ -114,6 +114,50 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // List available ElevenLabs voices
+  if (req.method === 'POST' && req.url === '/api/voices') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { apiKey } = JSON.parse(body);
+        const key = apiKey || ELEVEN_KEY;
+        if (!key) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No API key provided' }));
+          return;
+        }
+
+        const voicesRes = await fetch('https://api.elevenlabs.io/v1/voices', {
+          headers: { 'xi-api-key': key },
+        });
+
+        if (!voicesRes.ok) {
+          const err = await voicesRes.text();
+          res.writeHead(voicesRes.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err }));
+          return;
+        }
+
+        const data = await voicesRes.json();
+        const voices = (data.voices || []).map(v => ({
+          voice_id: v.voice_id,
+          name: v.name,
+          category: v.category || 'unknown',
+          description: v.labels ? Object.values(v.labels).join(', ') : '',
+          preview_url: v.preview_url || null,
+        }));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ voices }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // ElevenLabs TTS proxy
   if (req.method === 'POST' && req.url === '/api/tts') {
     if (!ELEVEN_KEY) {
