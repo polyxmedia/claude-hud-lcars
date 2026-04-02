@@ -471,6 +471,13 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   flex:1;font-size:0.75rem;color:var(--dim);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;
 }
+.hud-editor-toolbar .editor-lang{
+  font-family:'Antonio',sans-serif;font-size:0.7rem;font-weight:600;
+  color:var(--blue);letter-spacing:0.1em;text-transform:uppercase;padding:0 8px;
+}
+.hud-editor-toolbar .editor-lines{
+  font-size:0.7rem;color:var(--dim);padding:0 8px;
+}
 .hud-editor-toolbar .editor-save{
   background:var(--green);border:none;color:var(--bg);
   font-family:'Antonio',sans-serif;font-size:0.82rem;font-weight:600;
@@ -485,13 +492,46 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   border-radius:12px;transition:filter 0.12s;
 }
 .hud-editor-toolbar .editor-cancel:hover{filter:brightness(1.2)}
-.hud-editor textarea{
-  flex:1;background:#050506;border:none;color:var(--text);
-  font-family:'JetBrains Mono',monospace;font-size:0.85rem;
-  line-height:1.7;padding:16px 20px;resize:none;outline:none;
-  tab-size:2;white-space:pre;overflow:auto;
+.hud-editor-wrap{
+  flex:1;display:flex;overflow:auto;min-height:0;background:#050506;
+  position:relative;
 }
-.hud-editor textarea:focus{background:#080809}
+.hud-editor-lines{
+  padding:16px 0;width:48px;flex-shrink:0;text-align:right;
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  line-height:1.7;color:#333;user-select:none;background:#040405;
+  border-right:1px solid #1a1a1e;
+}
+.hud-editor-lines span{
+  display:block;padding:0 10px 0 0;
+}
+.hud-editor-lines span.active{color:var(--orange)}
+.hud-editor textarea{
+  flex:1;background:transparent;border:none;color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  line-height:1.7;padding:16px 16px;resize:none;outline:none;
+  tab-size:2;white-space:pre;overflow-x:auto;overflow-y:hidden;
+  min-height:100%;
+}
+/* Highlighted code overlay */
+.hud-editor-highlight{
+  position:absolute;top:0;left:48px;right:0;
+  padding:16px 16px;pointer-events:none;
+  font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  line-height:1.7;white-space:pre;tab-size:2;overflow:hidden;
+  color:transparent;
+}
+.hud-editor-highlight .hl-header{color:var(--peach);font-weight:600}
+.hud-editor-highlight .hl-comment{color:#555;font-style:italic}
+.hud-editor-highlight .hl-key{color:var(--cyan)}
+.hud-editor-highlight .hl-string{color:var(--peach)}
+.hud-editor-highlight .hl-number{color:var(--orange)}
+.hud-editor-highlight .hl-bool{color:var(--salmon)}
+.hud-editor-highlight .hl-keyword{color:var(--blue)}
+.hud-editor-highlight .hl-frontmatter{color:var(--tan)}
+.hud-editor-highlight .hl-code{color:var(--cyan)}
+.hud-editor-highlight .hl-bold{color:#eee;font-weight:600}
+.hud-editor-highlight .hl-bullet{color:var(--orange)}
 
 .computer-response h1,.computer-response h2,.computer-response h3{font-family:'Antonio',sans-serif;text-transform:uppercase;color:var(--peach);margin:16px 0 8px}
 .computer-response code{background:rgba(255,153,0,0.08);color:var(--orange);padding:2px 5px}
@@ -684,10 +724,16 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       <div class="hud-editor" id="hud-editor">
         <div class="hud-editor-toolbar">
           <span class="editor-path" id="editor-path"></span>
+          <span class="editor-lang" id="editor-lang"></span>
+          <span class="editor-lines" id="editor-line-count"></span>
           <button class="editor-save" onclick="saveFile()">SAVE</button>
           <button class="editor-cancel" onclick="closeEditor()">CANCEL</button>
         </div>
-        <textarea id="editor-textarea" spellcheck="false"></textarea>
+        <div class="hud-editor-wrap" id="editor-wrap">
+          <div class="hud-editor-lines" id="editor-gutter"></div>
+          <div class="hud-editor-highlight" id="editor-highlight"></div>
+          <textarea id="editor-textarea" spellcheck="false" oninput="onEditorInput()" onscroll="syncEditorScroll()" onclick="updateActiveLine()"></textarea>
+        </div>
       </div>
     </div>
   </div>
@@ -1027,8 +1073,8 @@ function hideWaveform() {
   }
   var label = document.getElementById('wf-label');
   if (label) label.classList.add('hidden');
-  document.getElementById('mic-btn').classList.remove('active');
-  document.getElementById('mic-btn').textContent = 'MIC';
+  var vb = document.getElementById('voice-toggle');
+  if (vb) vb.style.animation = 'none';
 }
 
 // ═══ SPEECH RECOGNITION (Mic Input) ═══
@@ -1056,8 +1102,8 @@ function startMic() {
   recognition.lang = 'en-US';
 
   micActive = true;
-  document.getElementById('mic-btn').classList.add('active');
-  document.getElementById('mic-btn').textContent = 'STOP';
+  var vb = document.getElementById('voice-toggle');
+  if (vb) vb.style.animation = 'mic-pulse 1s infinite';
   showWaveform('listening');
   beepAction();
 
@@ -1148,19 +1194,9 @@ speak = function(text) {
 var currentEditPath = '';
 
 function openEditor(filePath) {
-  if (window.HUD_LIVE) {
-    // Fetch file content from server
-    fetch('/api/open', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({path: filePath, readOnly: true}),
-    });
-  }
-  // The file body is already in the detail data, use it
   var textarea = document.getElementById('editor-textarea');
   var dpBody = document.getElementById('dp-b');
   var editor = document.getElementById('hud-editor');
-  // Find the raw content from the current detail
   var currentKey = document.querySelector('.r.sel');
   var key = currentKey ? currentKey.getAttribute('data-k') : null;
   var rawContent = key && D[key] ? D[key].b : '';
@@ -1169,11 +1205,104 @@ function openEditor(filePath) {
   currentEditPath = filePath;
   document.getElementById('editor-path').textContent = filePath;
 
+  // Detect language
+  var ext = filePath.split('.').pop().toLowerCase();
+  var langMap = {md:'MARKDOWN',json:'JSON',ts:'TYPESCRIPT',js:'JAVASCRIPT',yaml:'YAML',yml:'YAML'};
+  document.getElementById('editor-lang').textContent = langMap[ext] || ext.toUpperCase();
+
   dpBody.style.display = 'none';
   document.getElementById('dp-actions').style.display = 'none';
   editor.classList.add('active');
+
+  onEditorInput();
   textarea.focus();
   beepOpen();
+}
+
+function onEditorInput() {
+  var textarea = document.getElementById('editor-textarea');
+  var text = textarea.value;
+  var lines = text.split('\\n');
+  var lineCount = lines.length;
+
+  // Update line count display
+  document.getElementById('editor-line-count').textContent = lineCount + ' LINES';
+
+  // Render gutter
+  var gutter = document.getElementById('editor-gutter');
+  var gutterHtml = '';
+  for (var i = 1; i <= lineCount; i++) {
+    gutterHtml += '<span>' + i + '</span>';
+  }
+  gutter.innerHTML = gutterHtml;
+
+  // Render syntax highlight overlay
+  var hl = document.getElementById('editor-highlight');
+  hl.innerHTML = highlightEditor(text, currentEditPath);
+
+  // Sync heights
+  textarea.style.height = 'auto';
+  textarea.style.height = textarea.scrollHeight + 'px';
+  hl.style.height = textarea.scrollHeight + 'px';
+
+  updateActiveLine();
+}
+
+function syncEditorScroll() {
+  var textarea = document.getElementById('editor-textarea');
+  var hl = document.getElementById('editor-highlight');
+  var gutter = document.getElementById('editor-gutter');
+  var wrap = document.getElementById('editor-wrap');
+  hl.style.transform = 'translateY(-' + wrap.scrollTop + 'px)';
+  gutter.style.transform = 'translateY(-' + wrap.scrollTop + 'px)';
+}
+
+function updateActiveLine() {
+  var textarea = document.getElementById('editor-textarea');
+  var pos = textarea.selectionStart;
+  var lineNum = textarea.value.substring(0, pos).split('\\n').length;
+  var spans = document.getElementById('editor-gutter').querySelectorAll('span');
+  for (var i = 0; i < spans.length; i++) {
+    spans[i].classList.toggle('active', i === lineNum - 1);
+  }
+}
+
+function highlightEditor(text, filePath) {
+  var h = esc(text);
+  var ext = filePath.split('.').pop().toLowerCase();
+
+  if (ext === 'json') {
+    // JSON highlighting
+    h = h.replace(new RegExp('"([^"]*)"\\\\s*:','g'), '<span class="hl-key">"$1"</span>:');
+    h = h.replace(new RegExp('"([^"]*)"','g'), '<span class="hl-string">"$1"</span>');
+    h = h.replace(new RegExp('\\\\b(true|false)\\\\b','g'), '<span class="hl-bool">$1</span>');
+    h = h.replace(new RegExp('\\\\b(null)\\\\b','g'), '<span class="hl-keyword">$1</span>');
+    h = h.replace(new RegExp('\\\\b(-?\\\\d+\\\\.?\\\\d*)\\\\b','g'), '<span class="hl-number">$1</span>');
+    return h;
+  }
+
+  // Markdown highlighting (default for .md files and skill content)
+  // Frontmatter
+  h = h.replace(new RegExp('^(---[\\\\s\\\\S]*?---)','m'), '<span class="hl-frontmatter">$1</span>');
+
+  // Headers
+  h = h.replace(new RegExp('^(#{1,6} .+)$','gm'), '<span class="hl-header">$1</span>');
+
+  // Bold
+  h = h.replace(new RegExp('(\\\\*\\\\*[^*]+\\\\*\\\\*)','g'), '<span class="hl-bold">$1</span>');
+
+  // Inline code
+  var BT = String.fromCharCode(96);
+  h = h.replace(new RegExp(BT+'([^'+BT+']+)'+BT,'g'), '<span class="hl-code">'+BT+'$1'+BT+'</span>');
+
+  // Bullet points
+  h = h.replace(new RegExp('^(- )','gm'), '<span class="hl-bullet">- </span>');
+  h = h.replace(new RegExp('^(\\\\d+\\\\. )','gm'), '<span class="hl-bullet">$1</span>');
+
+  // Comments / blockquotes
+  h = h.replace(new RegExp('^(&gt; .+)$','gm'), '<span class="hl-comment">$1</span>');
+
+  return h;
 }
 
 function closeEditor() {
