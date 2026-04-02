@@ -4708,5 +4708,35 @@ setInterval(function() {
 </body></html>`;
 }
 
-fs.writeFileSync(OUTPUT, gen());
-console.log('Dashboard generated: ' + OUTPUT);
+const args = process.argv.slice(2);
+
+if (args.includes('--serve') || args.includes('-s')) {
+  // Live server mode
+  import('./server.js');
+} else {
+  fs.writeFileSync(OUTPUT, gen());
+  console.log('Dashboard generated: ' + OUTPUT);
+
+  // Auto-open in browser
+  if (!args.includes('--no-open')) {
+    const { exec } = await import('child_process');
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(cmd + ' ' + JSON.stringify(OUTPUT));
+  }
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('');
+    console.log('  Usage: claude-hud-lcars [options]');
+    console.log('');
+    console.log('  Options:');
+    console.log('    --serve, -s    Start live server with chat, voice, and file editing');
+    console.log('    --no-open      Generate dashboard without opening in browser');
+    console.log('    --help, -h     Show this help');
+    console.log('');
+    console.log('  Environment:');
+    console.log('    ANTHROPIC_API_KEY    Required for chat (live mode)');
+    console.log('    ELEVENLABS_API_KEY   Optional premium voice');
+    console.log('    PORT                 Server port (default: 3200)');
+    console.log('');
+  }
+}
