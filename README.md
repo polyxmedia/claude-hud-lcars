@@ -11,6 +11,12 @@
 
 ---
 
+<p align="center">
+  <img src="assets/preview.png" alt="claude-hud-lcars dashboard preview" width="100%">
+</p>
+
+---
+
 Your entire Claude Code setup, rendered as a Star Trek LCARS terminal. Skills, agents, hooks, MCP servers, plugins, memory files, environment variables, all of it visible, searchable, and actionable from one interface. Click anything to read the full content like you're pulling up a file on a PADD.
 
 There's also a built-in AI chat that responds as the Federation LCARS computer. With voice output. And sound effects. Because if you're going to build an operations dashboard for an AI coding tool, you might as well commit to the bit.
