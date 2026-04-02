@@ -474,6 +474,35 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
   }
 
   // Open file in default editor
+  if (req.method === 'POST' && req.url === '/api/delete') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { path: filePath } = JSON.parse(body);
+        const claudeDir = path.join(os.homedir(), '.claude');
+        const resolved = path.resolve(filePath.replace(/^~/, os.homedir()));
+        if (!resolved.startsWith(claudeDir)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Path outside ~/.claude/ is not allowed' }));
+          return;
+        }
+        if (!fs.existsSync(resolved)) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Path not found' }));
+          return;
+        }
+        fs.rmSync(resolved, { recursive: true, force: true });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/open') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -545,6 +574,27 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
         if (update.type === 'add-mcp') {
           if (!settings.mcpServers) settings.mcpServers = {};
           settings.mcpServers[update.name] = update.config;
+        } else if (update.type === 'remove-mcp') {
+          if (settings.mcpServers) delete settings.mcpServers[update.name];
+        } else if (update.type === 'remove-hook') {
+          const idx = update.index;
+          if (settings.hooks) {
+            for (const ev of Object.keys(settings.hooks)) {
+              let flat = 0;
+              outer: for (let mi = 0; mi < settings.hooks[ev].length; mi++) {
+                const m = settings.hooks[ev][mi];
+                if (!m.hooks) continue;
+                for (let hi = 0; hi < m.hooks.length; hi++) {
+                  if (flat === idx) {
+                    m.hooks.splice(hi, 1);
+                    if (m.hooks.length === 0) settings.hooks[ev].splice(mi, 1);
+                    break outer;
+                  }
+                  flat++;
+                }
+              }
+            }
+          }
         } else if (update.type === 'add-env') {
           if (!settings.env) settings.env = {};
           settings.env[update.key] = update.value;

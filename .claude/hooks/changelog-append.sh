@@ -23,18 +23,8 @@ if ! echo "$COMMAND" | grep -qE 'git\s+commit'; then
   exit 0
 fi
 
-# Extract commit message from -m flag (handles -m "msg" and -m 'msg')
-MSG="$(echo "$COMMAND" | sed -nE "s/.*-m[[:space:]]+['\"]([^'\"]+)['\"].*/\1/p")"
-
-# Fallback: look for heredoc-style message
-if [[ -z "$MSG" ]]; then
-  MSG="$(echo "$COMMAND" | grep -oP "(?<=-m\s{0,5})\"[^\"]+\"|'[^']+'|EOF.*?EOF" 2>/dev/null | tr -d "\"'" || true)"
-fi
-
-# If we still cannot parse a message, try to get it from git log
-if [[ -z "$MSG" ]]; then
-  MSG="$(cd "$PROJECT_DIR" && git log -1 --pretty=format:"%s" 2>/dev/null || true)"
-fi
+# Commit is already done by the time this hook fires — read message directly from git
+MSG="$(cd "$PROJECT_DIR" && git log -1 --pretty=format:"%s" 2>/dev/null || true)"
 
 if [[ -z "$MSG" ]]; then
   exit 0

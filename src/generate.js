@@ -342,22 +342,22 @@ function gen() {
   }
 
   const skillDiscoverCards = SKILL_SUGG.map(s => `
-    <div class="suggest-card">
+    <div class="suggest-card" onclick="open_('sugg:skill:${esc(s.name)}');beepOpen()">
       <div class="suggest-name">${esc(s.name)}</div>
       <div class="suggest-desc">${esc(s.desc)}</div>
       <div class="suggest-footer">
         <span class="suggest-tag">skill</span>
-        <button class="suggest-install" onclick="installSuggestSkill(this,${escA(s.name)},${escA(s.content)})">+ INSTALL</button>
+        <button class="suggest-install" onclick="event.stopPropagation();installSuggestSkill(this,${escA(s.name)},${escA(s.content)})">+ INSTALL</button>
       </div>
     </div>`).join('');
 
   const agentDiscoverCards = AGENT_SUGG.map(a => `
-    <div class="suggest-card">
+    <div class="suggest-card" onclick="open_('sugg:agent:${esc(a.name)}');beepOpen()">
       <div class="suggest-name">${esc(a.name)}</div>
       <div class="suggest-desc">${esc(a.desc)}</div>
       <div class="suggest-footer">
         <span class="suggest-tag">agent</span>
-        <button class="suggest-install" onclick="installSuggestAgent(this,${escA(a.name)},${escA(a.content)})">+ INSTALL</button>
+        <button class="suggest-install" onclick="event.stopPropagation();installSuggestAgent(this,${escA(a.name)},${escA(a.content)})">+ INSTALL</button>
       </div>
     </div>`).join('');
 
@@ -365,34 +365,36 @@ function gen() {
     const cfg = { command: m.cmd, args: m.args };
     if (m.env) cfg.env = m.env;
     return `
-    <div class="suggest-card">
+    <div class="suggest-card" onclick="open_('sugg:mcp:${esc(m.name)}');beepOpen()">
       <div class="suggest-name">${esc(m.name)}</div>
       <div class="suggest-desc">${esc(m.desc)}</div>
       <div class="suggest-footer">
         <span class="suggest-tag">${esc(m.cmd)}</span>
-        <button class="suggest-install" onclick="installSuggestMcp(this,${escA(m.name)},${escA(JSON.stringify(cfg))})">+ INSTALL</button>
+        <button class="suggest-install" onclick="event.stopPropagation();installSuggestMcp(this,${escA(m.name)},${escA(JSON.stringify(cfg))})">+ INSTALL</button>
       </div>
     </div>`;
   }).join('');
 
   const hookDiscoverCards = HOOK_SUGG.map(h => `
-    <div class="suggest-card">
+    <div class="suggest-card" onclick="open_('sugg:hook:${esc(h.name)}');beepOpen()">
       <div class="suggest-name">${esc(h.name)}</div>
       <div class="suggest-desc">${esc(h.desc)}</div>
       <div class="suggest-footer">
         <span class="suggest-tag">${esc(h.event)}</span>
-        <button class="suggest-install" onclick="installSuggestHook(this,${escA(h.event)},${escA(h.matcher||'')},${escA(h.cmd)})">+ INSTALL</button>
+        <button class="suggest-install" onclick="event.stopPropagation();installSuggestHook(this,${escA(h.event)},${escA(h.matcher||'')},${escA(h.cmd)})">+ INSTALL</button>
       </div>
     </div>`).join('');
 
   const D = {};
   skills.forEach(s => {
     const skillPath = path.join(CLAUDE_DIR, 'skills', s.name, 'SKILL.md');
+    const skillDir  = path.join(CLAUDE_DIR, 'skills', s.name);
     D['s:'+s.name] = { t: s.name, tp: 'SKILL MODULE', m: (s.ver?'v'+s.ver:'')+(s.ctx?' // '+s.ctx:''), b: s.body,
       actions: [
         { label: 'INVOKE', cmd: '/'+s.name, icon: 'RUN' },
         { label: 'OPEN FILE', cmd: 'open '+skillPath, icon: 'EDIT' },
         { label: 'COPY PATH', cmd: skillPath, icon: 'PATH' },
+        { label: 'DELETE', cmd: skillDir, icon: 'DEL' },
       ]};
   });
   agents.forEach(a => {
@@ -401,6 +403,7 @@ function gen() {
       actions: [
         { label: 'OPEN FILE', cmd: 'open '+agentPath, icon: 'EDIT' },
         { label: 'COPY PATH', cmd: agentPath, icon: 'PATH' },
+        { label: 'DELETE', cmd: agentPath, icon: 'DEL' },
       ]};
   });
   mcp.forEach(s => {
@@ -408,6 +411,7 @@ function gen() {
       actions: [
         { label: 'COPY CONFIG', cmd: JSON.stringify(s.config,null,2), icon: 'COPY' },
         { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+        { label: 'DELETE', cmd: 'mcp:'+s.name, icon: 'DEL' },
       ]};
   });
   hooks.forEach((h,i) => {
@@ -415,7 +419,31 @@ function gen() {
       actions: [
         { label: 'COPY HOOK JSON', cmd: JSON.stringify(h.full,null,2), icon: 'COPY' },
         { label: 'EDIT SETTINGS', cmd: 'open '+path.join(CLAUDE_DIR,'settings.json'), icon: 'EDIT' },
+        { label: 'DELETE', cmd: 'hook:'+i, icon: 'DEL' },
       ]};
+  });
+  // Discover suggestions — detail panel entries
+  SKILL_SUGG.forEach(s => {
+    D['sugg:skill:'+s.name] = { t: s.name, tp: 'SUGGESTED SKILL', m: 'not installed',
+      b: s.content,
+      actions: [{ label: '+ INSTALL', cmd: 'install:skill:'+s.name, icon: 'INSTALL' }] };
+  });
+  AGENT_SUGG.forEach(a => {
+    D['sugg:agent:'+a.name] = { t: a.name, tp: 'SUGGESTED AGENT', m: 'not installed',
+      b: a.content,
+      actions: [{ label: '+ INSTALL', cmd: 'install:agent:'+a.name, icon: 'INSTALL' }] };
+  });
+  MCP_SUGG.forEach(m => {
+    const cfg = { command: m.cmd, args: m.args };
+    if (m.env) cfg.env = m.env;
+    D['sugg:mcp:'+m.name] = { t: m.name, tp: 'SUGGESTED MCP SERVER', m: m.cmd+' '+m.args.join(' '),
+      b: '```json\n'+JSON.stringify(cfg,null,2)+'\n```\n\n'+m.desc,
+      actions: [{ label: '+ INSTALL', cmd: 'install:mcp:'+m.name, icon: 'INSTALL' }] };
+  });
+  HOOK_SUGG.forEach(h => {
+    D['sugg:hook:'+h.name] = { t: h.name, tp: 'SUGGESTED HOOK // '+h.event.toUpperCase(), m: h.event+(h.matcher?' // '+h.matcher:''),
+      b: h.desc+'\n\n```bash\n'+h.cmd+'\n```',
+      actions: [{ label: '+ INSTALL', cmd: 'install:hook:'+h.name, icon: 'INSTALL' }] };
   });
   mem.forEach(m => {
     const memPath = path.join(CLAUDE_DIR, 'projects', m.proj.replace(/\//g,'-'), 'memory', m.file);
@@ -794,8 +822,8 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .discover-arrow{font-size:0.65rem;transition:transform .15s;display:inline-block}
 .discover-hdr.open .discover-arrow{transform:rotate(90deg)}
 .discover-body{padding:8px 12px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
-.suggest-card{background:#05050a;border:1px solid #141420;padding:12px 14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s}
-.suggest-card:hover{border-color:#FF990033}
+.suggest-card{background:#05050a;border:1px solid #141420;padding:12px 14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s;cursor:pointer}
+.suggest-card:hover{border-color:#FF9900AA}
 .suggest-name{font-size:0.88rem;font-weight:600;color:#ccc}
 .suggest-desc{font-size:0.77rem;color:var(--dim,#555);flex:1;line-height:1.5}
 .suggest-footer{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
@@ -2074,6 +2102,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   try { x.timeout = 1000; x.send(); if (x.status === 200) { window.HUD_LIVE = true; } } catch(e) {}
 })();
 const D=${escJ(D)};
+window._D=D;
 const VIZ=${JSON.stringify({
   skills: skills.map(s => ({ name: s.name, desc: (s.desc||'').slice(0,80), ver: s.ver, ctx: s.ctx })),
   agents: agents.map(a => ({ name: a.name, desc: (a.desc||'').slice(0,80) })),
@@ -2157,11 +2186,45 @@ function doAction(btn){
       toast('Copied: '+cmd);
     });
   } else if(icon==='DEL'){
-    if(confirm('Copy delete command to clipboard?\\n'+cmd)){
-      navigator.clipboard.writeText(cmd).then(function(){
+    if(!confirm('Delete this item permanently?\\n\\n'+cmd)) return;
+    if(window.HUD_LIVE){
+      if(cmd.startsWith('mcp:')){
+        var mcpName=cmd.slice(4);
+        fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({type:'remove-mcp',name:mcpName})
+        }).then(function(r){return r.json()}).then(function(d){
+          if(d.ok){toast('REMOVED: '+mcpName);close_();setTimeout(function(){location.reload()},600);}
+          else toast('ERROR: '+d.error);
+        });
+      } else if(cmd.startsWith('hook:')){
+        var hookIdx=parseInt(cmd.slice(5));
+        fetch('/api/settings-update',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({type:'remove-hook',index:hookIdx})
+        }).then(function(r){return r.json()}).then(function(d){
+          if(d.ok){toast('HOOK REMOVED');close_();setTimeout(function(){location.reload()},600);}
+          else toast('ERROR: '+d.error);
+        });
+      } else {
+        fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({path:cmd})
+        }).then(function(r){return r.json()}).then(function(d){
+          if(d.ok){toast('DELETED');close_();setTimeout(function(){location.reload()},600);}
+          else toast('ERROR: '+d.error);
+        });
+      }
+    } else {
+      navigator.clipboard.writeText('rm -rf '+cmd).then(function(){
         toast('Copied delete command');
       });
     }
+  } else if(icon==='INSTALL'){
+    var parts=cmd.split(':');
+    var itype=parts[1], iname=parts.slice(2).join(':');
+    var d2=window._D&&window._D['sugg:'+itype+':'+iname];
+    if(!d2){toast('Cannot find suggestion data');return;}
+    if(itype==='skill') installSuggestSkill(btn,iname,d2.b);
+    else if(itype==='agent') installSuggestAgent(btn,iname,d2.b);
+    else toast('Use the INSTALL button on the card');
   } else {
     navigator.clipboard.writeText(cmd).then(function(){
       toast('Copied to clipboard');
