@@ -2207,7 +2207,7 @@ function testElevenLabs() {
     fetch('/api/tts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text: 'LCARS system online. All ship systems are functioning within normal parameters.', voiceId: voice }),
+      body: JSON.stringify({ text: 'LCARS system online. All ship systems are functioning within normal parameters.', voiceId: voice, apiKey: key }),
     }).then(function(r) {
       if (!r.ok) throw new Error('TTS request failed');
       return r.blob();
@@ -2486,7 +2486,7 @@ function sendGlobal() {
   // Show response overlay
   var cr = document.getElementById('cr');
   var crBody = document.getElementById('cr-body');
-  crBody.innerHTML = '<span style="color:var(--dim)">Processing...</span>';
+  crBody.innerHTML = '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(153,153,255,0.06);border-left:3px solid var(--blue)"><span style="font-size:0.7rem;color:var(--blue);letter-spacing:0.1em;text-transform:uppercase">YOU</span><p style="color:var(--text);margin-top:4px">' + esc(text) + '</p></div><span style="color:var(--dim)">Processing...</span>';
   cr.classList.add('visible');
 
   var btn = document.getElementById('cb-send');
