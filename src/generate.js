@@ -1347,9 +1347,14 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <div class="tac-legend" id="tac-legend"></div>
           <div class="tac-hint">CLICK NODE TO OPEN // HOVER FOR DETAILS</div>
         </div>
-        <div class="tac-view" id="tac-ship" style="position:relative;flex:1;min-height:0">
-          <canvas id="ship-canvas" style="width:100%;height:100%;display:block;background:#020204"></canvas>
-          <div style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-family:Antonio,sans-serif;font-size:0.7rem;color:var(--dim);letter-spacing:0.12em;text-transform:uppercase">USS ENTERPRISE NCC-1701-D // GALAXY CLASS</div>
+        <div class="tac-view" id="tac-ship" style="position:relative;flex:1;min-height:0;background:#020204">
+          <iframe id="ship-embed" title="Enterprise-D" style="width:100%;height:100%;border:none;display:none" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+          <div id="ship-placeholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px">
+            <div style="font-family:Antonio,sans-serif;font-size:1.2rem;color:var(--orange);letter-spacing:0.1em">USS ENTERPRISE NCC-1701-D</div>
+            <div style="font-size:0.7rem;color:var(--dim);letter-spacing:0.08em">GALAXY CLASS STARSHIP</div>
+            <button onclick="loadEnterprise()" style="margin-top:12px;background:var(--blue);border:none;color:#000;font-family:Antonio,sans-serif;font-size:0.85rem;font-weight:600;padding:8px 24px;border-radius:16px;cursor:pointer;letter-spacing:0.1em">LOAD 3D MODEL</button>
+            <div style="font-size:0.6rem;color:var(--faint);margin-top:4px">Interactive 3D model via Sketchfab</div>
+          </div>
         </div>
       </div>
 
@@ -3836,17 +3841,32 @@ function resetGraph() {
           var prefixes = { skills:'s', mcp:'m', hooks:'h', plugins:'p', agents:'a', env:'v', memory:'e' };
           return (prefixes[g] || g) + ':';
         });
-        // Try to find the matching data key
+        // Navigate to the relevant section and open the detail panel there
         var item = hoveredNode.detail;
-        if (hoveredNode.group === 'skills' && item) open_('s:' + item.name);
-        else if (hoveredNode.group === 'agents' && item) open_('a:' + item.name);
-        else if (hoveredNode.group === 'mcp' && item) open_('m:' + item.name);
-        else if (hoveredNode.group === 'hooks') { var idx = hoveredNode.id.split(':')[1]; open_('h:' + idx); }
-        else if (hoveredNode.group === 'plugins' && item) open_('p:' + item.id);
-        else if (hoveredNode.group === 'env' && item) open_('v:' + item.name);
+        var sectionMap = { skills:'skills', mcp:'mcp', hooks:'hooks', plugins:'plugins', agents:'agents', env:'env', memory:'memory' };
+        var secId = sectionMap[hoveredNode.group];
+        var dataKey = null;
+        if (hoveredNode.group === 'skills' && item) dataKey = 's:' + item.name;
+        else if (hoveredNode.group === 'agents' && item) dataKey = 'a:' + item.name;
+        else if (hoveredNode.group === 'mcp' && item) dataKey = 'm:' + item.name;
+        else if (hoveredNode.group === 'hooks') dataKey = 'h:' + hoveredNode.id.split(':')[1];
+        else if (hoveredNode.group === 'plugins' && item) dataKey = 'p:' + item.id;
+        else if (hoveredNode.group === 'env' && item) dataKey = 'v:' + item.name;
         else if (hoveredNode.group === 'memory' && item) {
           var memKey = VIZ.mem.findIndex(function(m) { return m.name === item.name && m.proj === item.proj; });
-          if (memKey >= 0) open_('e:' + VIZ.mem[memKey].name);
+          if (memKey >= 0) dataKey = 'e:' + VIZ.mem[memKey].name;
+        }
+        if (secId && dataKey) {
+          // Switch to the section tab first
+          var btns = document.querySelectorAll('.nb');
+          for (var b = 0; b < btns.length; b++) {
+            if (btns[b].getAttribute('onclick') && btns[b].getAttribute('onclick').indexOf("'" + secId + "'") !== -1) {
+              nav(secId, btns[b]);
+              break;
+            }
+          }
+          // Then open the detail
+          setTimeout(function() { open_(dataKey); }, 100);
         }
         beepOpen();
       }
@@ -3870,234 +3890,16 @@ function resetGraph() {
   };
 })();
 
-// ═══ ENTERPRISE WIREFRAME (Canvas 2D) ═══
-(function() {
-  var shipCanvas, shipCtx, shipAnim = null;
-
-  // 3D wireframe points and edges for Galaxy-class starship
-  // Coordinates: x=left/right, y=up/down, z=front/back
-  var VERTS = [
-    // Saucer section (ellipse outline, top view becomes circle)
-    // Front saucer arc
-    [0, 0, -4.5],     // 0: saucer front center
-    [-2, 0, -4.2],    // 1
-    [-3.5, 0, -3.2],  // 2
-    [-4.2, 0, -1.8],  // 3
-    [-4.4, 0, 0],     // 4: saucer left
-    [-4.2, 0, 1.8],   // 5
-    [-3.5, 0, 3.2],   // 6
-    [-2, 0, 4.2],     // 7
-    [0, 0, 4.5],      // 8: saucer rear center
-    [2, 0, 4.2],      // 9
-    [3.5, 0, 3.2],    // 10
-    [4.2, 0, 1.8],    // 11
-    [4.4, 0, 0],      // 12: saucer right
-    [4.2, 0, -1.8],   // 13
-    [3.5, 0, -3.2],   // 14
-    [2, 0, -4.2],     // 15
-    // Bridge dome
-    [0, 0.6, -1],     // 16: bridge
-    // Neck
-    [0, -0.5, 3],     // 17: neck top
-    [0, -0.5, 5.5],   // 18: neck bottom
-    [-0.5, -0.5, 3],  // 19
-    [0.5, -0.5, 3],   // 20
-    [-0.5, -0.5, 5.5],// 21
-    [0.5, -0.5, 5.5], // 22
-    // Engineering hull
-    [-1, -1, 5],       // 23
-    [1, -1, 5],        // 24
-    [-1.2, -1, 7],     // 25
-    [1.2, -1, 7],      // 26
-    [-1.2, -1, 11],    // 27
-    [1.2, -1, 11],     // 28
-    [-0.8, -1, 12],    // 29
-    [0.8, -1, 12],     // 30
-    [0, -1, 12.5],     // 31: engineering rear
-    // Deflector dish
-    [0, -1.2, 5.2],    // 32: deflector
-    [-0.6, -1.4, 5.5], // 33
-    [0.6, -1.4, 5.5],  // 34
-    [0, -1.6, 5.8],    // 35
-    // Left pylon
-    [-1.2, -0.8, 9],   // 36
-    [-3, 0.8, 10],     // 37
-    [-3, 0.8, 10.5],   // 38
-    // Right pylon
-    [1.2, -0.8, 9],    // 39
-    [3, 0.8, 10],      // 40
-    [3, 0.8, 10.5],    // 41
-    // Left nacelle
-    [-3, 0.8, 7],      // 42
-    [-3, 0.8, 14],     // 43
-    [-3.4, 0.8, 7.5],  // 44
-    [-3.4, 0.8, 13.5], // 45
-    [-2.6, 0.8, 7.5],  // 46
-    [-2.6, 0.8, 13.5], // 47
-    [-3, 0.8, 6.5],    // 48: nacelle front cap
-    [-3, 0.8, 14.5],   // 49: nacelle rear cap
-    // Right nacelle
-    [3, 0.8, 7],       // 50
-    [3, 0.8, 14],      // 51
-    [3.4, 0.8, 7.5],   // 52
-    [3.4, 0.8, 13.5],  // 53
-    [2.6, 0.8, 7.5],   // 54
-    [2.6, 0.8, 13.5],  // 55
-    [3, 0.8, 6.5],     // 56: nacelle front cap
-    [3, 0.8, 14.5],    // 57: nacelle rear cap
-  ];
-
-  // Edge pairs [from, to, colorGroup]
-  // colorGroup: 0=hull(orange), 1=glow(blue), 2=nacelle(cyan)
-  var EDGES = [
-    // Saucer outline
-    [0,1,0],[1,2,0],[2,3,0],[3,4,0],[4,5,0],[5,6,0],[6,7,0],[7,8,0],
-    [8,9,0],[9,10,0],[10,11,0],[11,12,0],[12,13,0],[13,14,0],[14,15,0],[15,0,0],
-    // Saucer cross lines
-    [0,8,0],[4,12,0],
-    // Bridge
-    [16,0,1],[16,4,1],[16,12,1],
-    // Neck
-    [17,18,0],[19,21,0],[20,22,0],[19,20,0],[21,22,0],[8,17,0],
-    // Engineering hull
-    [23,24,0],[23,25,0],[24,26,0],[25,27,0],[26,28,0],[27,29,0],[28,30,0],[29,31,0],[30,31,0],
-    [25,26,0],[27,28,0],
-    // Deflector
-    [32,33,1],[32,34,1],[33,35,1],[34,35,1],
-    // Left pylon
-    [36,37,0],[37,38,0],
-    // Right pylon
-    [39,40,0],[40,41,0],
-    // Left nacelle
-    [42,43,2],[44,45,2],[46,47,2],[48,42,2],[43,49,2],
-    [44,46,2],[45,47,2],[48,44,2],[48,46,2],[49,45,2],[49,47,2],
-    // Right nacelle
-    [50,51,2],[52,53,2],[54,55,2],[56,50,2],[51,57,2],
-    [52,54,2],[53,55,2],[56,52,2],[56,54,2],[57,53,2],[57,55,2],
-    // Nacelle glow lines (center)
-    [42,43,1],[50,51,1],
-  ];
-
-  var COLORS = ['rgba(255,153,0,0.5)', 'rgba(153,153,255,0.6)', 'rgba(102,204,204,0.7)'];
-
-  function project(x, y, z, rotY, rotX, W, H) {
-    // Rotate around Y axis
-    var cosY = Math.cos(rotY), sinY = Math.sin(rotY);
-    var rx = x * cosY - z * sinY;
-    var rz = x * sinY + z * cosY;
-    // Rotate around X axis
-    var cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-    var ry = y * cosX - rz * sinX;
-    var rz2 = y * sinX + rz * cosX;
-    // Orthographic projection with slight perspective
-    var scale = 18 + rz2 * 0.3;
-    return { x: W/2 + rx * scale, y: H/2 + ry * scale, z: rz2 };
-  }
-
-  function drawShip() {
-    var W = shipCanvas.width / devicePixelRatio;
-    var H = shipCanvas.height / devicePixelRatio;
-    var time = Date.now() * 0.0003;
-    var rotY = time;
-    var rotX = Math.sin(time * 0.4) * 0.15 + 0.3;
-
-    shipCtx.clearRect(0, 0, W, H);
-
-    // Grid
-    shipCtx.strokeStyle = 'rgba(153,153,255,0.04)';
-    shipCtx.lineWidth = 1;
-    for (var g = -3; g <= 3; g++) {
-      var gy = H/2 + g * 40;
-      shipCtx.beginPath(); shipCtx.moveTo(0, gy); shipCtx.lineTo(W, gy); shipCtx.stroke();
-      var gx = W/2 + g * 40;
-      shipCtx.beginPath(); shipCtx.moveTo(gx, 0); shipCtx.lineTo(gx, H); shipCtx.stroke();
-    }
-
-    // Project all vertices
-    var projected = VERTS.map(function(v) {
-      return project(v[0], v[1], v[2] - 5, rotY, rotX, W, H);
-    });
-
-    // Sort edges by average Z for basic depth ordering
-    var sortedEdges = EDGES.slice().sort(function(a, b) {
-      var za = (projected[a[0]].z + projected[a[1]].z) / 2;
-      var zb = (projected[b[0]].z + projected[b[1]].z) / 2;
-      return za - zb;
-    });
-
-    // Draw edges
-    sortedEdges.forEach(function(e) {
-      var a = projected[e[0]], b = projected[e[1]];
-      var avgZ = (a.z + b.z) / 2;
-      var brightness = 0.3 + (avgZ + 15) / 30 * 0.7;
-      brightness = Math.max(0.15, Math.min(1, brightness));
-
-      shipCtx.beginPath();
-      shipCtx.moveTo(a.x, a.y);
-      shipCtx.lineTo(b.x, b.y);
-      shipCtx.strokeStyle = COLORS[e[2]];
-      shipCtx.globalAlpha = brightness;
-      shipCtx.lineWidth = e[2] === 1 ? 1.5 : 1;
-      shipCtx.stroke();
-    });
-
-    shipCtx.globalAlpha = 1;
-
-    // Nacelle glow
-    [42, 50].forEach(function(idx) {
-      var p = projected[idx];
-      var pEnd = projected[idx === 42 ? 43 : 51];
-      var glow = shipCtx.createLinearGradient(p.x, p.y, pEnd.x, pEnd.y);
-      glow.addColorStop(0, 'rgba(102,204,204,0)');
-      glow.addColorStop(0.5, 'rgba(102,204,204,0.08)');
-      glow.addColorStop(1, 'rgba(102,204,204,0)');
-      shipCtx.strokeStyle = glow;
-      shipCtx.lineWidth = 6;
-      shipCtx.beginPath();
-      shipCtx.moveTo(p.x, p.y);
-      shipCtx.lineTo(pEnd.x, pEnd.y);
-      shipCtx.stroke();
-    });
-
-    // Labels
-    shipCtx.font = "600 10px 'Antonio', sans-serif";
-    shipCtx.textAlign = 'right';
-    shipCtx.textBaseline = 'top';
-    shipCtx.fillStyle = 'rgba(153,153,255,0.3)';
-    shipCtx.fillText('GALAXY CLASS STARSHIP', W - 12, 12);
-    shipCtx.fillStyle = 'rgba(255,153,0,0.3)';
-    shipCtx.fillText('WIREFRAME SCHEMATIC', W - 12, 26);
-
-    shipAnim = requestAnimationFrame(drawShip);
-  }
-
-  function initShipCanvas() {
-    shipCanvas = document.getElementById('ship-canvas');
-    if (!shipCanvas) return;
-    var parent = shipCanvas.parentElement;
-    var rect = parent.getBoundingClientRect();
-    shipCanvas.width = rect.width * devicePixelRatio;
-    shipCanvas.height = rect.height * devicePixelRatio;
-    shipCanvas.style.width = rect.width + 'px';
-    shipCanvas.style.height = rect.height + 'px';
-    shipCtx = shipCanvas.getContext('2d');
-    shipCtx.scale(devicePixelRatio, devicePixelRatio);
-    drawShip();
-  }
-
-  // Hook into tac tab switching
-  var _origSwitchTac = window.switchTac;
-  window.switchTac = function(tab) {
-    _origSwitchTac(tab);
-    if (tab === 'ship') {
-      if (!shipCtx) initShipCanvas();
-      else if (!shipAnim) drawShip();
-    } else {
-      if (shipAnim) { cancelAnimationFrame(shipAnim); shipAnim = null; }
-    }
-  };
-
-})();
+// ═══ ENTERPRISE 3D MODEL (Sketchfab Embed) ═══
+function loadEnterprise() {
+  var iframe = document.getElementById("ship-embed");
+  var placeholder = document.getElementById("ship-placeholder");
+  if (!iframe) return;
+  iframe.src = "https://sketchfab.com/models/e3118c97914342b3ad7dd957c4b4ce4e/embed?autostart=1\&ui_theme=dark\&ui_controls=1\&ui_infos=0\&ui_stop=0\&ui_inspector=0\&ui_watermark=0\&ui_watermark_link=0\&ui_ar=0\&ui_help=0\&ui_settings=0\&ui_vr=0\&ui_fullscreen=0\&ui_annotations=0\&camera=0\&preload=1";
+  iframe.style.display = "block";
+  if (placeholder) placeholder.style.display = "none";
+  beepOpen();
+}
 
 
 // ═══ BOOT SEQUENCE ═══
