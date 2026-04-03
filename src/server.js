@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
+import { categorizeChange, resolveWatchPath, buildChangeEvent, buildHudEvent } from './lib/fileWatcher.js';
+import { findActiveSessionJsonl, readSessionTotalTokens, calcBurnRate, projectMinutesRemaining, formatBurnBar } from './lib/burnRate.js';
 
 // CRC32 table built once at module load (used by solidPng)
 const _crc32Table = (() => {
@@ -79,6 +81,93 @@ async function generateDashboard() {
   const { execSync } = await import('child_process');
   execSync('node ' + path.join(import.meta.dirname, 'generate.js') + ' --no-open', { stdio: 'pipe' });
 }
+
+// ─── SSE live-events system ────────────────────────────────────────────────
+// Connected clients waiting for server-sent events
+const sseClients = new Set();
+
+function sseBroadcast(payload) {
+  const data = 'data: ' + JSON.stringify(payload) + '\n\n';
+  for (const res of sseClients) {
+    try { res.write(data); } catch { sseClients.delete(res); }
+  }
+}
+
+// File watcher — recursive watch on ~/.claude/
+const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+const HUD_EVENTS_PATH = path.join(CLAUDE_DIR, 'hud-events.jsonl');
+let hudEventsOffset = 0; // byte offset — track the tail of hud-events.jsonl
+
+function initFileWatcher() {
+  if (!fs.existsSync(CLAUDE_DIR)) return;
+  // Debounce map: path → timer
+  const debounce = new Map();
+  try {
+    fs.watch(CLAUDE_DIR, { recursive: true }, (eventType, filename) => {
+      const filePath = resolveWatchPath(CLAUDE_DIR, filename);
+      const key = filePath;
+      if (debounce.has(key)) clearTimeout(debounce.get(key));
+      debounce.set(key, setTimeout(() => {
+        debounce.delete(key);
+        const category = categorizeChange(filePath, CLAUDE_DIR);
+        // For hud-events, tail new lines and broadcast each as hud-event
+        if (category === 'hud-events') {
+          tailHudEvents();
+          return;
+        }
+        sseBroadcast(buildChangeEvent(category, filePath));
+      }, 150));
+    });
+  } catch { /* fs.watch not available on this platform */ }
+}
+
+function tailHudEvents() {
+  try {
+    const stat = fs.statSync(HUD_EVENTS_PATH);
+    if (stat.size <= hudEventsOffset) return;
+    const fd = fs.openSync(HUD_EVENTS_PATH, 'r');
+    const buf = Buffer.alloc(stat.size - hudEventsOffset);
+    fs.readSync(fd, buf, 0, buf.length, hudEventsOffset);
+    fs.closeSync(fd);
+    hudEventsOffset = stat.size;
+    const newContent = buf.toString('utf-8');
+    for (const line of newContent.split('\n')) {
+      const evt = buildHudEvent(line.trim());
+      if (evt) sseBroadcast(evt);
+    }
+  } catch { /* file may not exist yet */ }
+}
+
+// Burn rate broadcast — every 15s
+function broadcastBurnRate() {
+  try {
+    const jsonlPath = findActiveSessionJsonl(CLAUDE_DIR);
+    if (!jsonlPath) return;
+    const tokens = readSessionTotalTokens(jsonlPath);
+    // Build 3 synthetic data points from the session total to approximate a rate
+    // (real rate tracking would need a rolling window; this is a best-effort estimate)
+    const LIMIT = 88000;
+    const pct = (tokens.total / LIMIT) * 100;
+    sseBroadcast({
+      type: 'burn-rate',
+      pct: Math.min(100, Math.round(pct * 10) / 10),
+      totalTokens: tokens.total,
+      input: tokens.input,
+      output: tokens.output,
+      cacheCreation: tokens.cacheCreation,
+      cacheRead: tokens.cacheRead,
+      limit: LIMIT,
+      sessionPath: jsonlPath,
+    });
+  } catch { /* non-fatal */ }
+}
+
+// Initialise watcher after a short delay so the server is fully listening first
+setTimeout(() => {
+  initFileWatcher();
+  broadcastBurnRate();
+  setInterval(broadcastBurnRate, 15_000);
+}, 500);
 
 const server = http.createServer(async (req, res) => {
   // Block cross-origin POST/PUT/DELETE (CSRF protection — localhost server writes files)
@@ -1094,6 +1183,25 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+
+  // Live SSE event stream — dashboard clients subscribe here for real-time updates
+  if (req.method === 'GET' && req.url === '/api/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    // Send a heartbeat immediately so the client knows we're alive
+    res.write('data: ' + JSON.stringify({ type: 'connected', ts: Date.now() }) + '\n\n');
+    sseClients.add(res);
+    // Keep-alive ping every 25s to prevent proxy timeouts
+    const ping = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch { clearInterval(ping); sseClients.delete(res); }
+    }, 25_000);
+    req.on('close', () => { clearInterval(ping); sseClients.delete(res); });
     return;
   }
 

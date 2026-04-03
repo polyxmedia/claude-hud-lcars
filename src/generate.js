@@ -872,15 +872,32 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .st-n{font-family:'Antonio',sans-serif;font-size:1.5rem;font-weight:700;color:var(--orange);line-height:1}
 .st-l{font-size:0.55rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
 
+/* ═══ BURN RATE BAR ═══ */
+.brb{grid-column:2;display:flex;align-items:center;gap:10px;padding:4px 16px 4px 80px;background:var(--bg);font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.08em;color:var(--dim);border-top:1px solid rgba(255,153,0,0.12);min-height:26px}
+.brb-bar{display:flex;gap:1px;align-items:center}
+.brb-block{width:14px;height:10px;border-radius:2px}
+.brb-block.filled{background:var(--orange)}
+.brb-block.empty{background:rgba(255,153,0,0.18)}
+.brb-pct{color:var(--orange);min-width:36px;text-align:right}
+.brb-sep{color:rgba(255,153,0,0.35);margin:0 4px}
+.brb-time{min-width:80px}
+.brb-rate{color:var(--dim)}
+.brb-live{font-size:0.55rem;letter-spacing:0.15em;color:#66EE66;background:rgba(102,238,102,0.12);padding:1px 5px;border-radius:4px;margin-left:auto}
+
 /* ═══ MAIN AREA ═══ */
 .mn{grid-column:2;display:flex;gap:0;min-height:0;overflow:hidden;margin-top:4px}
 .mn-edge{width:72px;background:var(--lavender);flex-shrink:0;position:relative;border-radius:0 24px 24px 0}
+/* LCARS elbow notch — black quarter-circle in the top-left corner of the main edge */
+.mn-edge::before{
+  content:'';position:absolute;top:-4px;left:0;width:28px;height:28px;
+  background:var(--bg);border-radius:0 0 0 28px;z-index:1;
+}
 
 .mn-content{flex:1;display:grid;grid-template-columns:1fr 0fr;transition:grid-template-columns 0.25s ease;min-height:0;overflow:hidden;gap:4px;margin-left:4px}
 .mn-content.open{grid-template-columns:1fr 1fr}
 
 /* ═══ LIST ═══ */
-.ls{background:#060608;overflow-y:auto;min-height:0;border-radius:12px}
+.ls{background:#060608;overflow-y:auto;min-height:0;border-radius:16px}
 
 .sec{display:none}
 .sec.on{display:block}
@@ -921,7 +938,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .cf-row input,.cf-row textarea,.cf-row select{
   flex:1;background:#0a0a0c;border:1px solid #222;color:var(--text);
   font-family:'JetBrains Mono',monospace;font-size:0.82rem;
-  padding:8px 12px;outline:none;
+  padding:8px 12px;outline:none;border-radius:8px;
 }
 .cf-row input:focus,.cf-row textarea:focus{border-color:var(--orange)}
 .cf-row textarea{min-height:80px;resize:vertical}
@@ -969,7 +986,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   display:flex;gap:3px;padding:12px 12px 0;
 }
 .mcp-overview-stat{
-  flex:1;background:#060608;border:1px solid #1a1a1e;padding:12px;text-align:center;
+  flex:1;background:#060608;border:1px solid #1a1a1e;padding:12px;text-align:center;border-radius:12px;
 }
 .mcp-overview-n{font-family:'Antonio',sans-serif;font-size:1.8rem;font-weight:700;line-height:1}
 .mcp-overview-n.green{color:var(--green)}
@@ -982,7 +999,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card{
   background:#060608;border:1px solid #1a1a1e;position:relative;
   padding:16px;cursor:pointer;transition:background 0.12s,border-color 0.15s;
-  display:grid;grid-template-rows:auto auto auto auto;gap:8px;
+  display:grid;grid-template-rows:auto auto auto auto;gap:8px;border-radius:16px;
 }
 .mcp-card:hover{background:#0c0c10;border-color:#2a2a30}
 .mcp-card.sel{border-color:var(--orange);background:rgba(255,153,0,0.04)}
@@ -1002,7 +1019,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 }
 .mcp-card-type{
   font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;
-  padding:3px 8px;flex-shrink:0;
+  padding:3px 8px;flex-shrink:0;border-radius:6px;
 }
 .mcp-card-type.node{background:rgba(85,204,85,0.12);color:var(--green)}
 .mcp-card-type.python{background:rgba(102,204,204,0.12);color:var(--cyan)}
@@ -1066,7 +1083,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .discover-arrow{font-size:0.65rem;transition:transform .15s;display:inline-block}
 .discover-hdr.open .discover-arrow{transform:rotate(90deg)}
 .discover-body{padding:8px 12px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
-.suggest-card{background:#05050a;border:1px solid #141420;padding:12px 14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s;cursor:pointer}
+.suggest-card{background:#05050a;border:1px solid #141420;padding:12px 14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s;cursor:pointer;border-radius:14px}
 .suggest-card:hover{border-color:#FF9900AA}
 .suggest-name{font-size:0.88rem;font-weight:600;color:#ccc}
 .suggest-desc{font-size:0.77rem;color:var(--dim,#555);flex:1;line-height:1.5}
@@ -1304,7 +1321,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   font-family:'JetBrains Mono',monospace;font-size:0.82rem;
   padding:8px 12px;text-align:left;cursor:pointer;
   display:flex;align-items:center;justify-content:space-between;
-  transition:border-color 0.15s;
+  transition:border-color 0.15s;border-radius:8px;
 }
 .lcars-select-btn:hover{border-color:var(--orange)}
 .lcars-select-btn::after{
@@ -1317,7 +1334,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .lcars-dropdown{
   display:none;position:absolute;top:100%;left:0;right:0;z-index:20;
   background:#0a0a0c;border:1px solid var(--orange);border-top:none;
-  max-height:200px;overflow-y:auto;
+  max-height:200px;overflow-y:auto;border-radius:0 0 8px 8px;
 }
 .lcars-dropdown.open{display:block}
 .lcars-option{
@@ -1846,6 +1863,16 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
     ${sections.filter(s => s.count !== null).map(s => `<div class="st"><div class="st-n">${String(s.count).padStart(3,'0')}</div><div class="st-l">${s.label}</div></div>`).join('\n    ')}
   </div>
   <div class="stb-cap"></div>
+</div>
+
+<div class="brb" id="burn-bar">
+  <div class="brb-bar" id="brb-bar"></div>
+  <span class="brb-pct" id="brb-pct">—%</span>
+  <span class="brb-sep">│</span>
+  <span class="brb-time" id="brb-time">connecting…</span>
+  <span class="brb-sep">│</span>
+  <span class="brb-rate" id="brb-rate">CONTEXT WINDOW</span>
+  <span class="brb-live" id="brb-live" style="display:none">LIVE</span>
 </div>
 
 <div class="mn">
@@ -5892,6 +5919,124 @@ setInterval(function() {
   if (localStorage.getItem('hud-q-muted') === '1') return;
   if (Math.random() < 0.05) qFlash();
 }, 120000);
+
+// ─── SSE live events client ────────────────────────────────────────────────
+(function() {
+  var BLOCKS = 10;
+
+  function renderBurnBar(pct) {
+    var bar = document.getElementById('brb-bar');
+    if (!bar) return;
+    var filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * BLOCKS);
+    var html = '';
+    for (var i = 0; i < BLOCKS; i++) {
+      html += '<div class="brb-block ' + (i < filled ? 'filled' : 'empty') + '"></div>';
+    }
+    bar.innerHTML = html;
+  }
+
+  function updateBurnBar(evt) {
+    var pct = evt.pct || 0;
+    var total = evt.totalTokens || 0;
+    var limit = evt.limit || 88000;
+    renderBurnBar(pct);
+    var pctEl = document.getElementById('brb-pct');
+    if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+    var timeEl = document.getElementById('brb-time');
+    if (timeEl) {
+      var remaining = limit - total;
+      timeEl.textContent = remaining > 0
+        ? '~' + Math.round(remaining / 1000) + 'k tokens left'
+        : 'LIMIT REACHED';
+      timeEl.style.color = pct >= 90 ? '#FF4444' : pct >= 70 ? '#FFCC00' : '';
+    }
+    var rateEl = document.getElementById('brb-rate');
+    if (rateEl) {
+      var used = Math.round(total / 1000 * 10) / 10;
+      rateEl.textContent = used + 'k / ' + Math.round(limit / 1000) + 'k tokens';
+    }
+    // colour the bar blocks red when near limit
+    if (pct >= 90) {
+      document.querySelectorAll('.brb-block.filled').forEach(function(el) {
+        el.style.background = '#FF4444';
+      });
+    } else if (pct >= 70) {
+      document.querySelectorAll('.brb-block.filled').forEach(function(el) {
+        el.style.background = '#FFCC00';
+      });
+    }
+  }
+
+  function handleFileChange(evt) {
+    // Show a brief toast and optionally update the LIVE badge
+    var labels = {
+      'skills': 'SKILLS UPDATED',
+      'agents': 'AGENTS UPDATED',
+      'settings': 'SETTINGS CHANGED',
+      'claudemd': 'CLAUDE.MD CHANGED',
+      'session': 'SESSION UPDATED',
+      'memory': 'MEMORY UPDATED',
+      'hud-events': 'HUD EVENT',
+      'other': 'FILE CHANGED'
+    };
+    var msg = labels[evt.category] || 'FILE CHANGED';
+    if (typeof toast === 'function') toast(msg);
+  }
+
+  function handleHudEvent(evt) {
+    var liveEl = document.getElementById('brb-live');
+    if (liveEl) {
+      liveEl.style.display = '';
+      clearTimeout(liveEl._t);
+      liveEl._t = setTimeout(function() { liveEl.style.display = 'none'; }, 4000);
+    }
+    // Append to COMMS if that section is live
+    if (typeof appendHudEventToComms === 'function') appendHudEventToComms(evt);
+  }
+
+  function connectSSE() {
+    var es = new EventSource('/api/events');
+    es.onopen = function() {
+      var liveEl = document.getElementById('brb-live');
+      if (liveEl) liveEl.style.display = '';
+    };
+    es.onmessage = function(e) {
+      try {
+        var evt = JSON.parse(e.data);
+        if (evt.type === 'connected') {
+          renderBurnBar(0);
+          var rateEl = document.getElementById('brb-rate');
+          if (rateEl) rateEl.textContent = 'CONTEXT WINDOW';
+          var timeEl = document.getElementById('brb-time');
+          if (timeEl) timeEl.textContent = 'live';
+        } else if (evt.type === 'burn-rate') {
+          updateBurnBar(evt);
+        } else if (evt.type === 'file-change') {
+          handleFileChange(evt);
+        } else if (evt.type === 'hud-event') {
+          handleHudEvent(evt);
+        }
+      } catch (err) { /* skip malformed */ }
+    };
+    es.onerror = function() {
+      var liveEl = document.getElementById('brb-live');
+      if (liveEl) liveEl.style.display = 'none';
+      var timeEl = document.getElementById('brb-time');
+      if (timeEl) timeEl.textContent = 'reconnecting…';
+      es.close();
+      setTimeout(connectSSE, 5000);
+    };
+  }
+
+  // Only connect when served from localhost (not static file)
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    connectSSE();
+  } else {
+    var timeEl = document.getElementById('brb-time');
+    if (timeEl) timeEl.textContent = 'static mode';
+    renderBurnBar(0);
+  }
+})();
 </script>
 </body></html>`;
 }
