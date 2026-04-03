@@ -40,9 +40,9 @@ The roadmap is about turning the mirror into a brain.
 - **Schema validation** — Settings mutations validated against Claude Code's config schema before write. Catches malformed hooks, bad MCP entries, typos in model names.
 
 ### Small quality-of-life
-- **Q mute toggle** — He's funny for five minutes. Add a snooze button.
-- **COMPUTER bar model persists** — Write model choice to settings.json so it survives a reload.
-- **Keyboard shortcuts for actions** — `E` to edit, `O` to open file, `C` to copy, without clicking the buttons.
+- **Q mute toggle** — ~~He's funny for five minutes.~~ Done. MUTE RANDOM VISITS button in Q tab header, persisted to localStorage.
+- **COMPUTER bar model persists** — Already done. Model choice saves to `hud-config` in localStorage and survives reload.
+- **Keyboard shortcuts for actions** — Done. `E` to edit/open, `R` to run/invoke, `C` to copy — fires the matching action button in the detail panel.
 
 ---
 

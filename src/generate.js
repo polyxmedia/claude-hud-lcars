@@ -1949,9 +1949,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-q">
-        <div style="padding:20px 24px;border-bottom:2px solid var(--red)">
-          <div style="font-family:Antonio,sans-serif;font-size:1.4rem;color:var(--red);letter-spacing:0.08em;text-transform:uppercase">Q Continuum</div>
-          <div style="font-size:0.7rem;color:var(--dim);margin-top:4px;letter-spacing:0.06em">An audience with the omnipotent. Proceed at your own risk.</div>
+        <div style="padding:20px 24px;border-bottom:2px solid var(--red);display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-family:Antonio,sans-serif;font-size:1.4rem;color:var(--red);letter-spacing:0.08em;text-transform:uppercase">Q Continuum</div>
+            <div style="font-size:0.7rem;color:var(--dim);margin-top:4px;letter-spacing:0.06em">An audience with the omnipotent. Proceed at your own risk.</div>
+          </div>
+          <button id="q-snooze-btn" onclick="toggleQMute()" style="background:rgba(204,68,68,0.15);border:1px solid rgba(204,68,68,0.4);color:var(--red);font-family:Antonio,sans-serif;font-size:0.7rem;font-weight:600;padding:6px 14px;cursor:pointer;letter-spacing:0.1em;border-radius:10px">MUTE RANDOM VISITS</button>
         </div>
         <div id="q-content" style="flex:1;overflow-y:auto;padding:20px 24px">
           <div id="q-judgement" style="margin-bottom:24px"></div>
@@ -4546,6 +4549,22 @@ document.addEventListener('keydown', function(e) {
     var first = document.querySelector('.sr');
     if (first) first.click();
   }
+
+  // Detail panel shortcuts: E=edit, O=open, C=copy — only when panel is open and not typing
+  if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var mc = document.getElementById('mc');
+  if (!mc || !mc.classList.contains('open')) return;
+  var actions = document.querySelectorAll('#dp-actions .act-btn');
+  if (!actions.length) return;
+  var key = e.key.toLowerCase();
+  actions.forEach(function(btn) {
+    var icon = btn.getAttribute('data-icon');
+    if ((key === 'e' && icon === 'EDIT') || (key === 'r' && icon === 'RUN') || (key === 'c' && icon === 'COPY')) {
+      e.preventDefault();
+      btn.click();
+    }
+  });
 });
 
 // ═══ TACTICAL TAB SWITCHING ═══
@@ -5600,8 +5619,34 @@ function qFlash() {
   }, 4000);
 }
 
+// Q mute toggle
+function toggleQMute() {
+  var muted = localStorage.getItem('hud-q-muted') === '1';
+  var next = !muted;
+  localStorage.setItem('hud-q-muted', next ? '1' : '0');
+  var btn = document.getElementById('q-snooze-btn');
+  if (btn) {
+    btn.textContent = next ? 'UNMUTE RANDOM VISITS' : 'MUTE RANDOM VISITS';
+    btn.style.background = next ? 'rgba(204,68,68,0.4)' : 'rgba(204,68,68,0.15)';
+  }
+  toast(next ? 'Q: Random visits muted' : 'Q: Random visits enabled');
+}
+
+// Init Q mute button state on load
+(function() {
+  var muted = localStorage.getItem('hud-q-muted') === '1';
+  if (muted) {
+    var btn = document.getElementById('q-snooze-btn');
+    if (btn) {
+      btn.textContent = 'UNMUTE RANDOM VISITS';
+      btn.style.background = 'rgba(204,68,68,0.4)';
+    }
+  }
+})();
+
 // Random Q encounters (5% chance every 2 minutes)
 setInterval(function() {
+  if (localStorage.getItem('hud-q-muted') === '1') return;
   if (Math.random() < 0.05) qFlash();
 }, 120000);
 </script>
