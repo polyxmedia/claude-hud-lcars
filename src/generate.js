@@ -54,7 +54,30 @@ function getSettings() {
   catch(e) { console.warn('Warning: settings.json parse error:', e.message); return null; }
 }
 
-function parseMcpEntry(name, c, source) {
+const MCP_SECURITY_FLAGS = {
+  'mcp-remote': { cve: 'CVE-2025-6514', severity: 'HIGH', detail: 'Command injection via authorization_endpoint in OAuth proxy. Update to latest version.' },
+};
+const MCP_RISKY_PATTERNS = [
+  { pattern: '--privileged', severity: 'HIGH', detail: 'Docker --privileged grants full host access' },
+  { pattern: '--cap-add SYS_ADMIN', severity: 'HIGH', detail: 'SYS_ADMIN capability allows host escape' },
+  { pattern: '--network host', severity: 'MEDIUM', detail: 'Host network mode bypasses container network isolation' },
+];
+
+function auditMcp(name, c) {
+  const flags = [];
+  // Check known CVEs
+  const cmdStr = (c.args || []).join(' ');
+  for (const [pkg, flag] of Object.entries(MCP_SECURITY_FLAGS)) {
+    if (name === pkg || cmdStr.includes(pkg)) flags.push(flag);
+  }
+  // Check risky patterns in args
+  for (const { pattern, severity, detail } of MCP_RISKY_PATTERNS) {
+    if (cmdStr.includes(pattern)) flags.push({ severity, detail: pattern + ': ' + detail });
+  }
+  return flags;
+}
+
+function parseMcpEntry(name, c, source, disabled) {
   let serverType = 'unknown';
   const mainArg = (c.args || []).slice(-1)[0] || '';
   if (c.command === 'node') serverType = 'node';
@@ -68,11 +91,13 @@ function parseMcpEntry(name, c, source) {
   }
 
   const envCount = c.env ? Object.keys(c.env).length : 0;
+  const securityFlags = auditMcp(name, c);
 
   return {
     name, cmd: c.command, args: c.args || [], hasEnv: !!c.env,
     serverType, fileStatus, envCount, source,
-    entryPoint: mainArg,
+    entryPoint: mainArg, disabled: !!disabled,
+    securityFlags,
     config: { ...c, env: c.env ? '{redacted — ' + envCount + ' vars}' : undefined },
   };
 }
@@ -81,11 +106,20 @@ function getMcpServers(s) {
   const out = [];
   const seen = new Set();
 
-  // 1. From settings.json mcpServers
+  // 1. From settings.json mcpServers (enabled)
   if (s?.mcpServers) {
     for (const [name, c] of Object.entries(s.mcpServers)) {
-      out.push(parseMcpEntry(name, c, 'settings.json'));
+      out.push(parseMcpEntry(name, c, 'settings.json', false));
       seen.add(name);
+    }
+  }
+  // 1b. From settings.json mcpServersDisabled (disabled but preserved)
+  if (s?.mcpServersDisabled) {
+    for (const [name, c] of Object.entries(s.mcpServersDisabled)) {
+      if (!seen.has(name)) {
+        out.push(parseMcpEntry(name, c, 'settings.json (disabled)', true));
+        seen.add(name);
+      }
     }
   }
 
@@ -355,6 +389,30 @@ function getHistory() {
   return out;
 }
 
+function scoreClaudeMd(body) {
+  const lines = body.split('\n');
+  const lineCount = lines.length;
+  const issues = [], praise = [];
+  let score = 100;
+  if (lineCount > 500) { score -= 30; issues.push('Very long (' + lineCount + ' lines) — key instructions may get lost'); }
+  else if (lineCount > 200) { score -= 15; issues.push('Long (' + lineCount + ' lines) — consider splitting into project-level files'); }
+  else if (lineCount > 20) praise.push('Good length (' + lineCount + ' lines)');
+  const headers = lines.filter(l => l.startsWith('#')).length;
+  if (headers === 0) { score -= 20; issues.push('No section headers — unstructured content is harder for Claude to prioritise'); }
+  else if (headers >= 3) praise.push(headers + ' sections defined');
+  const text = body.toLowerCase();
+  const hasPersona = text.includes('you are') || text.includes('persona') || text.includes('role:') || text.includes('act as');
+  const hasRules = text.includes('never') || text.includes('always') || text.includes('must') || text.includes('rule');
+  const hasTone = text.includes('tone') || text.includes('voice') || text.includes('style') || text.includes('concise') || text.includes('formal');
+  if (!hasPersona) { score -= 10; issues.push('No persona/role definition found'); }
+  else praise.push('Persona defined');
+  if (!hasRules) { score -= 10; issues.push('No explicit rules or constraints'); }
+  else praise.push('Rules present');
+  if (!hasTone) { score -= 5; issues.push('No tone/style guidance'); }
+  if (body.trim().length < 100) { score -= 50; issues.push('Very minimal — Claude has almost no guidance to work with'); }
+  return { score: Math.max(0, Math.min(100, score)), issues, praise };
+}
+
 function getClaudeMdFiles() {
   const out = [];
   // Global CLAUDE.md
@@ -362,7 +420,8 @@ function getClaudeMdFiles() {
   if (fs.existsSync(globalPath)) {
     try {
       const raw = fs.readFileSync(globalPath, 'utf-8');
-      out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length });
+      const health = scoreClaudeMd(raw);
+      out.push({ scope: 'GLOBAL', path: globalPath, project: '~/.claude/', body: raw, size: raw.length, health });
     } catch(e) {}
   }
   // Project CLAUDE.md files
@@ -375,11 +434,42 @@ function getClaudeMdFiles() {
       try {
         const raw = fs.readFileSync(cp, 'utf-8');
         const proj = p.name.replace(/-/g, '/').replace(/^\//, '');
-        out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length });
+        const health = scoreClaudeMd(raw);
+        out.push({ scope: 'PROJECT', path: cp, project: proj, body: raw, size: raw.length, health });
       } catch(e) {}
     }
   }
   return out;
+}
+
+function getProjectHistory() {
+  const out = [];
+  const projDir = path.join(CLAUDE_DIR, 'projects');
+  if (!fs.existsSync(projDir)) return out;
+  try {
+    for (const entry of fs.readdirSync(projDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const projPath = path.join(projDir, entry.name);
+      let sessionCount = 0, lastActivity = 0;
+      try {
+        const files = fs.readdirSync(projPath);
+        const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+        sessionCount = jsonlFiles.length;
+        for (const f of jsonlFiles) {
+          try {
+            const mtime = fs.statSync(path.join(projPath, f)).mtimeMs;
+            if (mtime > lastActivity) lastActivity = mtime;
+          } catch(e) {}
+        }
+      } catch(e) {}
+      if (sessionCount === 0) continue;
+      // Decode path: -Users-andrefigueira-Code-foo => /Users/andrefigueira/Code/foo (best effort)
+      const decoded = ('/' + entry.name.replace(/^-/, '')).replace(/-/g, '/');
+      const shortName = decoded.split('/').filter(Boolean).slice(-2).join('/');
+      out.push({ name: entry.name, path: decoded, shortName, sessions: sessionCount, lastActivity });
+    }
+  } catch(e) {}
+  return out.sort((a, b) => b.lastActivity - a.lastActivity);
 }
 
 function getEnv(s) { return s?.env || {}; }
@@ -397,6 +487,7 @@ function gen() {
   const hooks = getHooks(S), env = getEnv(S), plugins = getPlugins(S);
   const mem = getMemoryFiles(), sessions = getSessionCount();
   const sessionList = getSessions(), history = getHistory(), claudeMds = getClaudeMdFiles();
+  const projectHistory = getProjectHistory();
   const ts = new Date().toISOString().replace('T',' ').slice(0,19)+'Z';
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
 
@@ -597,12 +688,22 @@ function gen() {
 
   // CLAUDE.md files
   claudeMds.forEach((c, i) => {
+    const h = c.health;
+    const healthSummary = h.score + '/100' + (h.issues.length ? ' — Issues: ' + h.issues.join('; ') : ' — Looks good');
     D['cd:'+i] = { t: c.scope === 'GLOBAL' ? 'Global CLAUDE.md' : c.project.split('/').slice(-2).join('/'),
-      tp: 'CLAUDE.MD // ' + c.scope, m: c.project + ' // ' + c.size + ' bytes', b: c.body,
+      tp: 'CLAUDE.MD // ' + c.scope, m: c.project + ' // ' + healthSummary, b: c.body,
       actions: [
         { label: 'OPEN FILE', cmd: 'open ' + c.path, icon: 'EDIT' },
         { label: 'COPY PATH', cmd: c.path, icon: 'PATH' },
       ]};
+  });
+
+  // Project history
+  projectHistory.forEach((p, i) => {
+    D['ph:'+i] = { t: p.shortName, tp: 'PROJECT HISTORY',
+      m: p.sessions + ' sessions // last active ' + (p.lastActivity ? new Date(p.lastActivity).toISOString().slice(0,10) : 'unknown'),
+      b: '**Project:** ' + p.path + '\n\n**Sessions:** ' + p.sessions + '\n\n**Last Activity:** ' + (p.lastActivity ? new Date(p.lastActivity).toISOString().replace('T',' ').slice(0,19) : 'unknown') + '\n\n*Open Claude Code in this directory to resume work.*',
+      actions: [{ label: 'COPY PATH', cmd: p.path, icon: 'PATH' }]};
   });
 
   Object.entries(env).forEach(([k, v]) => {
@@ -621,7 +722,7 @@ function gen() {
     { id: 'agents', label: 'AGENTS', color: '#FFCC99', count: agents.length },
     { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
-    { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: sessionList.length },
+    { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: projectHistory.length },
     { id: 'claudemd', label: 'CLAUDE.MD', color: '#EE8844', count: claudeMds.length },
     { id: 'market', label: 'MARKET', color: '#FF6644', count: marketItems.length },
     { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
@@ -939,6 +1040,24 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .mcp-card-status-label.missing{color:var(--orange)}
 .mcp-card-status-label.unknown{color:var(--tan)}
 .mcp-card-status-label.checking{color:var(--blue)}
+.mcp-card-disabled{opacity:0.5;filter:grayscale(0.6)}
+.mcp-toggle-btn{font-family:Antonio,sans-serif;font-size:0.6rem;letter-spacing:0.1em;padding:2px 8px;background:transparent;border:1px solid #333;color:var(--dim);cursor:pointer;border-radius:4px;flex-shrink:0;margin-left:8px}
+.mcp-toggle-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.mcp-sec-flag{font-family:Antonio,sans-serif;font-size:0.55rem;letter-spacing:0.08em;padding:2px 6px;background:rgba(204,68,68,0.15);border:1px solid rgba(204,68,68,0.4);color:var(--red);border-radius:4px;cursor:help;flex-shrink:0;margin-left:auto}
+.mcp-card-status.mcp-disabled{background:var(--faint)}
+.ph-card{background:#0a0a0c;border:1px solid #1a1a1e;border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color 0.15s}
+.ph-card:hover{border-color:var(--ltblue)}
+.ph-card-name{font-family:Antonio,sans-serif;font-size:0.9rem;letter-spacing:0.06em;color:var(--ltblue)}
+.ph-card-meta{font-size:0.65rem;color:var(--dim);display:flex;gap:12px}
+.ph-card-sessions{color:var(--cyan)}
+.ph-card-date{color:var(--faint)}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;padding:12px}
+.health-badge{display:inline-flex;align-items:center;gap:6px;font-family:Antonio,sans-serif;font-size:0.65rem;letter-spacing:0.1em;padding:3px 10px;border-radius:10px;border:1px solid}
+.health-badge.good{color:var(--green);border-color:rgba(85,204,85,0.4);background:rgba(85,204,85,0.08)}
+.health-badge.warn{color:var(--gold);border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.08)}
+.health-badge.bad{color:var(--red);border-color:rgba(204,68,68,0.4);background:rgba(204,68,68,0.08)}
+.health-issues{font-size:0.65rem;color:var(--red);margin-top:4px;display:flex;flex-direction:column;gap:2px}
+.health-praise{font-size:0.65rem;color:var(--dim);margin-top:2px}
 
 /* ═══ DISCOVER ═══ */
 .discover{border-top:1px dashed #1a1a1e;margin-top:4px}
@@ -1771,11 +1890,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
         <div class="mcp-grid">
           ${mcp.map(s=>`
-          <div class="mcp-card" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}" data-mcp="${esc(s.name)}">
+          <div class="mcp-card${s.disabled?' mcp-card-disabled':''}" onclick="open_('m:${esc(s.name)}')" data-k="m:${esc(s.name)}" data-mcp="${esc(s.name)}">
             <div class="mcp-card-top">
-              <div class="mcp-card-status checking" id="mcp-dot-${esc(s.name)}"></div>
+              <div class="mcp-card-status ${s.disabled?'mcp-disabled':'checking'}" id="mcp-dot-${esc(s.name)}"></div>
               <div class="mcp-card-name">${esc(s.name)}</div>
               <span class="mcp-card-type ${esc(s.serverType)}">${esc(s.serverType)}</span>
+              ${s.securityFlags.length?`<span class="mcp-sec-flag" title="${esc(s.securityFlags.map(f=>f.cve||f.detail).join(', '))}">&#9888; ${s.securityFlags[0].severity||'WARN'}</span>`:''}
             </div>
             <div class="mcp-card-body">
               <div class="mcp-card-row">
@@ -1792,8 +1912,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
               </div>`:''}
             </div>
             <div class="mcp-card-footer">
-              <div class="mcp-card-bar"><div class="bar-fill checking"></div></div>
-              <div class="mcp-card-status-label checking" id="mcp-label-${esc(s.name)}">CHECKING</div>
+              ${s.disabled
+                ? `<div class="mcp-card-bar"><div class="bar-fill" style="width:100%;background:var(--faint)"></div></div><div class="mcp-card-status-label" style="color:var(--dim)">DISABLED</div>`
+                : `<div class="mcp-card-bar"><div class="bar-fill checking"></div></div><div class="mcp-card-status-label checking" id="mcp-label-${esc(s.name)}">CHECKING</div>`}
+              <button class="mcp-toggle-btn" onclick="event.stopPropagation();toggleMcp(${escA(s.name)},${s.disabled})">${s.disabled?'ENABLE':'DISABLE'}</button>
             </div>
           </div>`).join('')}
         </div>`}
@@ -1817,6 +1939,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <span class="r-d">${esc(h.cmd.slice(0,100))}</span>
         </div>`).join('')}
         ${discoverHtml('hooks', hookDiscoverCards, HOOK_SUGG.length)}
+        <div style="padding:12px 16px;border-top:1px solid #1a1a1e;display:flex;align-items:center;gap:12px">
+          <span style="font-size:0.65rem;color:var(--dim);flex:1">Install a hook that logs every event to <code style="color:var(--cyan)">~/.claude/hud-events.jsonl</code> — enables future session analytics.</span>
+          <button onclick="installHudLogger()" style="font-family:Antonio,sans-serif;font-size:0.65rem;letter-spacing:0.1em;padding:5px 14px;background:rgba(102,204,204,0.1);border:1px solid rgba(102,204,204,0.4);color:var(--cyan);cursor:pointer;border-radius:6px;flex-shrink:0">INSTALL HUD LOGGER</button>
+        </div>
       </div>
 
       <div class="sec" id="s-plugins">
@@ -1905,24 +2031,51 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-sessions">
-        <div class="sec-h">Recent Sessions</div>
-        <div class="session-stats" id="session-stats"></div>
-        <div class="ls">
-        ${sessionList.map((s, i) => {
-          const date = s.started ? new Date(s.started).toISOString().replace('T', ' ').slice(0, 16) : '?';
-          return '<div class="r" data-k="ss:' + i + '" onclick="open_(\'ss:' + i + '\')"><span class="r-n">' + esc(s.project || s.id.slice(0,8)) + '</span><span class="r-tg"><span class="tg tg-b">' + esc(s.kind) + '</span></span><span class="r-d">' + esc(date) + '</span></div>';
-        }).join('')}
-        </div>
+        <div class="sec-h">Session History // ${projectHistory.length} Projects</div>
+        ${sessionList.length ? `<div style="padding:8px 12px;background:#0a0a0c;border-bottom:1px solid #1a1a1e">
+          <div style="font-family:Antonio,sans-serif;font-size:0.65rem;letter-spacing:0.1em;color:var(--dim);margin-bottom:6px">ACTIVE SESSIONS</div>
+          ${sessionList.map((s, i) => {
+            const date = s.started ? new Date(s.started).toISOString().replace('T', ' ').slice(0, 16) : '?';
+            return '<div class="r" data-k="ss:' + i + '" onclick="open_(\'ss:' + i + '\')" style="border-left:2px solid var(--green)"><span class="r-n">' + esc(s.project || s.id.slice(0,8)) + '</span><span class="r-tg"><span class="tg tg-g">LIVE</span><span class="tg tg-b">' + esc(s.kind) + '</span></span><span class="r-d">' + esc(date) + '</span></div>';
+          }).join('')}
+        </div>` : ''}
+        ${projectHistory.length === 0 ? '<div class="emp">No project history found</div>' : `
+        <div style="padding:8px 12px 4px;font-family:Antonio,sans-serif;font-size:0.65rem;letter-spacing:0.1em;color:var(--dim)">ALL PROJECTS</div>
+        <div class="ph-grid">
+          ${projectHistory.map((p, i) => {
+            const date = p.lastActivity ? new Date(p.lastActivity).toISOString().replace('T', ' ').slice(0, 10) : '?';
+            return `<div class="ph-card" onclick="open_('ph:${i}')">
+              <div class="ph-card-name">${esc(p.shortName)}</div>
+              <div class="ph-card-meta">
+                <span class="ph-card-sessions">${p.sessions} session${p.sessions !== 1 ? 's' : ''}</span>
+                <span class="ph-card-date">${esc(date)}</span>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`}
       </div>
 
       <div class="sec" id="s-claudemd">
-        <div class="sec-h">CLAUDE.md Files</div>
-        <div class="ls">
-        ${claudeMds.map((c, i) => {
+        <div class="sec-h">CLAUDE.md // Context Substrate</div>
+        ${claudeMds.length === 0 ? '<div class="emp">No CLAUDE.md files found. Create ~/.claude/CLAUDE.md to give Claude persistent instructions.</div>' :
+        claudeMds.map((c, i) => {
           const label = c.scope === 'GLOBAL' ? 'Global CLAUDE.md' : c.project.split('/').slice(-2).join('/');
-          return '<div class="r" data-k="cd:' + i + '" onclick="open_(\'cd:' + i + '\')"><span class="r-n">' + esc(label) + '</span><span class="r-tg"><span class="tg tg-o">' + esc(c.scope) + '</span></span><span class="r-d">' + c.size + ' bytes</span></div>';
+          const h = c.health;
+          const badgeClass = h.score >= 70 ? 'good' : h.score >= 40 ? 'warn' : 'bad';
+          const lines = c.body.split('\n').length;
+          return `<div style="border-bottom:1px solid #1a1a1e">
+            <div class="r" data-k="cd:${i}" onclick="open_('cd:${i}')">
+              <span class="r-n">${esc(label)}</span>
+              <span class="r-tg">
+                <span class="tg tg-o">${esc(c.scope)}</span>
+                <span class="health-badge ${badgeClass}">${h.score}/100</span>
+              </span>
+              <span class="r-d">${lines} lines</span>
+            </div>
+            ${h.issues.length ? `<div class="health-issues" style="padding:0 16px 8px">${h.issues.map(iss => '⚠ ' + esc(iss)).join('<br>')}</div>` : ''}
+            ${h.praise.length && !h.issues.length ? `<div class="health-praise" style="padding:0 16px 8px">${h.praise.map(p => '✓ ' + esc(p)).join(' · ')}</div>` : ''}
+          </div>`;
         }).join('')}
-        </div>
       </div>
 
       <div class="sec" id="s-viz">
@@ -1968,6 +2121,10 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
       </div>
 
       <div class="sec" id="s-comms">
+        <div style="padding:8px 16px;border-bottom:1px solid #1a1a1e;display:flex;align-items:center;justify-content:flex-end;gap:8px">
+          <span style="font-size:0.6rem;color:var(--dim);letter-spacing:0.08em;flex:1">HISTORY PERSISTS ACROSS RELOADS</span>
+          <button onclick="clearCommsHistory()" style="font-family:Antonio,sans-serif;font-size:0.6rem;letter-spacing:0.1em;padding:3px 10px;background:transparent;border:1px solid #333;color:var(--dim);cursor:pointer;border-radius:4px">CLEAR HISTORY</button>
+        </div>
         <div class="comms">
           <div class="comms-log" id="comms-log">
             <div class="comms-msg sys">COMMS CHANNEL // USE THE COMPUTER BAR BELOW TO COMMUNICATE</div>
@@ -4080,6 +4237,51 @@ function createSkill() {
   }).catch(function(e){ toast('ERROR: ' + e.message); });
 }
 
+function installHudLogger() {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var logCmd = "python3 -c \\"import sys,json,datetime,os; d=json.load(sys.stdin); ev=os.environ.get('CLAUDE_HOOK_EVENT','unknown'); log=json.dumps({'ts':datetime.datetime.now().isoformat(),'event':ev,'tool':d.get('tool_name',''),'session':d.get('session_id','')}); open(os.path.expanduser('~/.claude/hud-events.jsonl'),'a').write(log+'\\\\n')\\"";
+  var hooks = [
+    { event: 'PreToolUse', hook: { type: 'command', command: logCmd } },
+    { event: 'PostToolUse', hook: { type: 'command', command: logCmd } },
+    { event: 'Stop', hook: { type: 'command', command: logCmd } },
+  ];
+  var promises = hooks.map(function(h) {
+    return fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'add-hook', event: h.event, hook: h.hook }),
+    }).then(function(r){ return r.json(); });
+  });
+  Promise.all(promises).then(function(results) {
+    var allOk = results.every(function(d){ return d.ok; });
+    if (allOk) { toast('HUD LOGGER INSTALLED — 3 hooks added'); beepAction(); }
+    else { toast('Some hooks failed to install'); }
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
+}
+
+function toggleMcp(name, isDisabled) {
+  if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
+  var type = isDisabled ? 'enable-mcp' : 'disable-mcp';
+  fetch('/api/settings-update', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ type: type, name: name }),
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.ok) {
+      toast(isDisabled ? 'ENABLED: ' + name : 'DISABLED: ' + name);
+      // Update card appearance
+      var card = document.querySelector('[data-mcp="' + name + '"]');
+      if (card) {
+        card.classList.toggle('mcp-card-disabled', !isDisabled);
+        var btn = card.querySelector('.mcp-toggle-btn');
+        if (btn) { btn.textContent = isDisabled ? 'DISABLE' : 'ENABLE'; btn.setAttribute('onclick', 'event.stopPropagation();toggleMcp(' + JSON.stringify(name) + ',' + !isDisabled + ')'); }
+        var dot = card.querySelector('.mcp-card-status');
+        if (dot) { dot.className = 'mcp-card-status ' + (isDisabled ? 'checking' : 'mcp-disabled'); }
+        var label = card.querySelector('[id^="mcp-label-"]');
+        if (label && isDisabled) { label.className='mcp-card-status-label checking'; label.textContent='CHECKING'; }
+        if (label && !isDisabled) { label.textContent='DISABLED'; label.className='mcp-card-status-label'; label.style.color='var(--dim)'; }
+      }
+      beepAction();
+    } else { toast('ERROR: ' + d.error); }
+  }).catch(function(e){ toast('ERROR: ' + e.message); });
+}
+
 function createMcp() {
   if (!window.HUD_LIVE) { toast('Requires live mode'); return; }
   var name = document.getElementById('cf-mcp-name').value.trim();
@@ -4302,6 +4504,45 @@ function lcarsScanHTML() {
 // ═══ GLOBAL COMPUTER CHAT ═══
 var chatHistory = [];
 
+function saveCommsHistory() {
+  try { localStorage.setItem('hud-comms-history', JSON.stringify(chatHistory.slice(-50))); } catch(e) {}
+}
+
+function clearCommsHistory() {
+  chatHistory = [];
+  try { localStorage.removeItem('hud-comms-history'); } catch(e) {}
+  var log = document.getElementById('comms-log');
+  if (log) {
+    log.innerHTML = '<div class="comms-msg sys">COMMS CHANNEL // USE THE COMPUTER BAR BELOW TO COMMUNICATE</div><div class="comms-msg sys">HISTORY CLEARED</div>';
+  }
+  document.getElementById('cr-toggle').style.display = 'none';
+  toast('COMMS HISTORY CLEARED');
+}
+
+(function restoreCommsHistory() {
+  try {
+    var saved = localStorage.getItem('hud-comms-history');
+    if (!saved) return;
+    var msgs = JSON.parse(saved);
+    if (!Array.isArray(msgs) || !msgs.length) return;
+    chatHistory = msgs;
+    // Render after DOM is ready — defer to after DOMContentLoaded equivalent
+    setTimeout(function() {
+      var log = document.getElementById('comms-log');
+      if (!log) return;
+      msgs.forEach(function(msg) {
+        var div = document.createElement('div');
+        div.className = 'comms-msg ' + msg.role;
+        if (msg.role === 'ai') { div.innerHTML = md(msg.content); }
+        else { div.textContent = msg.content; }
+        log.appendChild(div);
+      });
+      log.scrollTop = log.scrollHeight;
+      showLogButton();
+    }, 300);
+  } catch(e) {}
+})();
+
 function addMsg(role, text) {
   var log = document.getElementById('comms-log');
   if (!log) return null;
@@ -4375,6 +4616,7 @@ function sendGlobal() {
   // Show in comms log
   addMsg('user', text);
   chatHistory.push({ role: 'user', content: text });
+  saveCommsHistory();
 
   // Show response overlay with scan animation
   var cr = document.getElementById('cr');
@@ -4421,6 +4663,7 @@ function sendGlobal() {
           clearTimeout(safetyTimer);
           _chatInProgress = false;
           chatHistory.push({ role: 'assistant', content: fullText });
+          saveCommsHistory();
           btn.disabled = false;
           btn.textContent = 'SEND';
           beepReceive();

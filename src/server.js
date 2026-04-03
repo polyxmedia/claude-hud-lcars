@@ -576,6 +576,21 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
           settings.mcpServers[update.name] = update.config;
         } else if (update.type === 'remove-mcp') {
           if (settings.mcpServers) delete settings.mcpServers[update.name];
+          if (settings.mcpServersDisabled) delete settings.mcpServersDisabled[update.name];
+        } else if (update.type === 'disable-mcp') {
+          const cfg = settings.mcpServers && settings.mcpServers[update.name];
+          if (cfg) {
+            if (!settings.mcpServersDisabled) settings.mcpServersDisabled = {};
+            settings.mcpServersDisabled[update.name] = cfg;
+            delete settings.mcpServers[update.name];
+          }
+        } else if (update.type === 'enable-mcp') {
+          const cfg = settings.mcpServersDisabled && settings.mcpServersDisabled[update.name];
+          if (cfg) {
+            if (!settings.mcpServers) settings.mcpServers = {};
+            settings.mcpServers[update.name] = cfg;
+            delete settings.mcpServersDisabled[update.name];
+          }
         } else if (update.type === 'remove-hook') {
           const idx = update.index;
           if (settings.hooks) {

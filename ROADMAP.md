@@ -6,7 +6,7 @@
 
 ## Current State — Honest Rating
 
-**Version 1.3.6 — 7.5 / 10**
+**Version 1.4.0 — 8 / 10**
 
 | Dimension | Score | Notes |
 |-----------|-------|-------|
@@ -40,9 +40,15 @@ The roadmap is about turning the mirror into a brain.
 - **Schema validation** — Settings mutations validated against Claude Code's config schema before write. Catches malformed hooks, bad MCP entries, typos in model names.
 
 ### Small quality-of-life
-- **Q mute toggle** — ~~He's funny for five minutes.~~ Done. MUTE RANDOM VISITS button in Q tab header, persisted to localStorage.
-- **COMPUTER bar model persists** — Already done. Model choice saves to `hud-config` in localStorage and survives reload.
+- **Q mute toggle** — Done. MUTE RANDOM VISITS button in Q tab header, persisted to localStorage.
+- **COMPUTER bar model persists** — Done. Model choice saves to `hud-config` in localStorage and survives reload.
 - **Keyboard shortcuts for actions** — Done. `E` to edit/open, `R` to run/invoke, `C` to copy — fires the matching action button in the detail panel.
+- **COMPUTER bar history persistence** — Done. Saves last 50 messages to localStorage, restores on reload. CLEAR HISTORY button in COMMS header.
+- **MCP enable/disable toggles** — Done. Each MCP card has a DISABLE/ENABLE button. Moves servers to/from `mcpServersDisabled` in settings.json — config preserved, Claude stops loading it.
+- **CLAUDE.md health scoring** — Done. Each file scored 0-100: line count, structure, persona/rules coverage. Issues shown inline, score badge on each row.
+- **Project history panel** — Done. SESSIONS tab now shows all 48+ projects from `~/.claude/projects/` with session count and last activity date.
+- **MCP security audit** — Done. Cards flag CVE-2025-6514 (mcp-remote), `--privileged` docker, `--cap-add SYS_ADMIN`, `--network host` with severity badges.
+- **Hook event logger** — Done. INSTALL HUD LOGGER button in HOOKS section installs PreToolUse/PostToolUse/Stop hooks that write to `~/.claude/hud-events.jsonl` — foundation for future session analytics.
 
 ---
 
@@ -173,7 +179,7 @@ Before any of the above, these are the embarrassing things that should be fixed:
 
 1. **generate.js needs to be split** — 5,600+ lines is not sustainable. Section generators into separate logical blocks minimum.
 2. **No end-to-end tests** — The data layer is tested. The actual UI interactions are not. One Playwright smoke test suite.
-3. **COMPUTER bar history disappears on reload** — Persist to `localStorage`, cap at 50 messages. Simple, but the absence of it is embarrassing.
+3. ~~**COMPUTER bar history disappears on reload**~~ — Done in 1.4.0.
 4. **No onboarding** — First-time user with zero skills/hooks sees empty sections with no guidance. An empty state that teaches is better than an empty state that just sits there.
 5. **MCP server detail shows redacted env** — Right, but there's no way to view or edit env vars in the UI. Circular. Fix it.
 
