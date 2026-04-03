@@ -6,7 +6,7 @@
 
 ## Current State — Honest Rating
 
-**Version 1.3.5 — 7.5 / 10**
+**Version 1.3.6 — 7.5 / 10**
 
 | Dimension | Score | Notes |
 |-----------|-------|-------|
@@ -30,12 +30,12 @@ The roadmap is about turning the mirror into a brain.
 *The dashboard should know what's happening right now, not just what was true when you last reloaded.*
 
 ### Real-time awareness
-- **File watcher** — `fs.watch()` on `~/.claude/` broadcasts changes via WebSocket. Dashboard updates live when you install a new skill, Claude edits a hook, or a memory file is written. No manual reload.
-- **Session stream** — Live view of active Claude Code sessions. See the current working directory, last command, token usage, and whether Claude is thinking/writing/waiting. Think activity monitor, not static list.
-- **MCP health monitor** — Continuous ping of MCP servers. Status badges go live/degraded/offline in real time, not just on page load.
+- **File watcher** — `fs.watch()` on `~/.claude/` broadcasts changes via WebSocket. Dashboard updates live when you install a new skill, Claude edits a hook, or a memory file is written. No manual reload. Changes the fundamental feel from static to alive.
+- **Session monitor** — Live view of active Claude Code sessions across your machine. What directory they're in, whether they're thinking/idle, rough token usage. `ps aux` gets the process info, a panel turns it into something readable.
+- **MCP health check** — PING button per server that fires a test command and returns a live/degraded/dead badge in real time. Immediately useful when debugging why Claude isn't using a tool it should be.
 
 ### Config as code
-- **Settings diff viewer** — Every change to `settings.json` shown as a git-style diff with timestamp. Know what changed and when.
+- **Settings diff viewer** — Snapshot `settings.json` on load, show a git-style diff panel whenever it changes. Every time Claude Code touches your hooks or MCP config you'll know exactly what moved and when.
 - **One-click rollback** — Restore any previous settings snapshot from a visible history panel.
 - **Schema validation** — Settings mutations validated against Claude Code's config schema before write. Catches malformed hooks, bad MCP entries, typos in model names.
 
@@ -53,7 +53,7 @@ The roadmap is about turning the mirror into a brain.
 ### Skill & agent workshop
 - **Skill builder** — Form-based UI to create skills with frontmatter fields (name, description, context, version), a full body editor with markdown preview, and a one-click save to `~/.claude/skills/`. No file editing required.
 - **Agent builder** — Same for agents. Define tools list, system prompt, model preference.
-- **Skill tester** — Send a test prompt directly to a skill from the detail panel. See the response without leaving the dashboard.
+- **Skill tester** — Fire a test prompt at a skill directly from the detail panel, see the response inline. The `/api/chat` endpoint already exists, just needs routing. Closes the loop without leaving the dashboard.
 - **Hook lab** — Write a hook, set the event + matcher, and test it against a sample payload. Shows what the hook would do before you commit it to settings.json.
 
 ### MCP setup wizard
@@ -62,7 +62,7 @@ The roadmap is about turning the mirror into a brain.
 - **Dependency check** — Verifies `npx`, `uvx`, `docker` etc. are available before adding the server to settings.
 
 ### Context substrate builder
-- **CLAUDE.md editor** — Visual editor for `~/.claude/CLAUDE.md` and per-project CLAUDE.md files. Structured sections (persona, rules, preferences, project context) with a live preview. This is where the AI's permanent memory lives — it deserves a real UI.
+- **CLAUDE.md editor** — Structured visual editor for `~/.claude/CLAUDE.md` and per-project CLAUDE.md files. Sections for persona, rules, preferences, project context — with live markdown preview and one-click save. This is the most important file in the whole setup and it gets zero UI love right now. That needs to change.
 - **Memory editor** — Browse, edit, create, and delete memory files directly in the dashboard. Tag files, link them to projects, see which ones are being loaded into which contexts.
 
 ---
@@ -83,7 +83,7 @@ The roadmap is about turning the mirror into a brain.
 
 ### Pattern learning
 - **Cross-session context** — Surfaces recurring patterns from your chat history: questions you ask Claude repeatedly, errors that keep coming back, file paths you reference often. Turns patterns into suggested CLAUDE.md entries or new skills.
-- **Prompt library** — Extract the prompts that worked. When a COMPUTER bar conversation produces something useful, save it as a reusable template with one click.
+- **Prompt library** — A "save as template" button on any COMPUTER bar response. Stores the prompt and response to a browsable library. The tool should accumulate value over time instead of being stateless and amnesiac.
 
 ---
 
@@ -171,9 +171,9 @@ To stay grounded:
 
 Before any of the above, these are the embarrassing things that should be fixed:
 
-1. **generate.js needs to be split** — 5,600 lines is not sustainable. Section generators into separate logical blocks minimum.
+1. **generate.js needs to be split** — 5,600+ lines is not sustainable. Section generators into separate logical blocks minimum.
 2. **No end-to-end tests** — The data layer is tested. The actual UI interactions are not. One Playwright smoke test suite.
-3. **COMPUTER bar history disappears on reload** — Should persist to localStorage at minimum.
+3. **COMPUTER bar history disappears on reload** — Persist to `localStorage`, cap at 50 messages. Simple, but the absence of it is embarrassing.
 4. **No onboarding** — First-time user with zero skills/hooks sees empty sections with no guidance. An empty state that teaches is better than an empty state that just sits there.
 5. **MCP server detail shows redacted env** — Right, but there's no way to view or edit env vars in the UI. Circular. Fix it.
 
