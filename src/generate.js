@@ -2289,7 +2289,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <div class="cfg-row">
                   <span class="cfg-label">API Key</span>
                   <span class="cfg-desc">Get yours from <a href="https://elevenlabs.io" target="_blank" style="color:var(--orange)">elevenlabs.io</a></span>
-                  <span class="cfg-input"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onApiKeyChange()"></span>
+                  <span class="cfg-input"><form onsubmit="return false"><input type="password" id="cfg-eleven-key" placeholder="sk_..." oninput="onApiKeyChange()" autocomplete="off"></form></span>
                 </div>
                 <div class="cfg-row-stack">
                   <span class="cfg-label">Voice</span>

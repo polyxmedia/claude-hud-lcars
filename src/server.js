@@ -508,7 +508,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
         if (d.done) {
           es.close();
           if (d.code === 0) {
-            log.textContent += '\nUpdate complete — restarting...';
+            log.textContent += '\\nUpdate complete - restarting...';
             setTimeout(function() { location.reload(); }, 2000);
           } else {
             btn.textContent = 'Failed — see log';
