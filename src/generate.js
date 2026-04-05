@@ -882,7 +882,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .tb-a2{width:60px;background:var(--blue);border-radius:0 0 24px 0}
 
 /* ═══ STATS BAR ═══ */
-.stb{grid-column:2;display:flex;gap:6px}
+.stb{grid-column:2;display:flex;gap:6px;margin-bottom:6px}
 .stb-inner{flex:1;display:flex;gap:3px;padding:3px 0 3px 8px;background:var(--lavender);border-radius:24px;overflow:hidden}
 .st{flex:1;background:var(--bg);padding:5px 12px;text-align:center;border-radius:0;border-right:2px solid rgba(204,153,204,0.25)}
 .st:last-child{border-right:none}
@@ -891,7 +891,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .st-l{font-size:0.55rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
 
 /* ═══ BURN RATE BAR ═══ */
-.brb{grid-column:2;display:flex;align-items:center;gap:10px;padding:4px 16px 4px 80px;background:var(--bg);font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.08em;color:var(--dim);border-top:1px solid rgba(255,153,0,0.12);min-height:26px}
+.brb{grid-column:2;display:flex;align-items:center;gap:10px;padding:4px 16px 4px 80px;background:var(--bg);font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.08em;color:var(--dim);min-height:26px}
 .brb-bar{display:flex;gap:1px;align-items:center}
 .brb-block{width:14px;height:10px;border-radius:2px}
 .brb-block.filled{background:var(--orange)}
