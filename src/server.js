@@ -369,10 +369,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #pwa-banner .pwa-bm:hover{background:#FF990022}
 #pwa-banner .pwa-close{background:transparent;color:#666;border:none;font-size:16px;padding:4px 8px;line-height:1}
 #pwa-banner .pwa-close:hover{color:#FF9900}
-#hud-toolbar{position:fixed;top:10px;right:14px;z-index:9998;display:flex;align-items:center;gap:6px}
-#hud-toolbar .hud-tb-btn{background:#FF990018!important;color:#FF9900!important;border:1px solid rgba(255,153,0,0.6)!important;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1!important;transition:opacity .15s,background .15s,border-color .15s}
-#hud-toolbar .hud-tb-btn:hover{background:#FF990033!important;border-color:#FF9900!important}
-#hud-update-badge{background:#FF4400;color:#fff;border:none;opacity:1;animation:upd-pulse 2s ease-in-out infinite}
+#hud-update-badge{position:fixed;top:10px;right:14px;z-index:9998;background:#FF4400;color:#fff;border:none;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1;display:none;animation:upd-pulse 2s ease-in-out infinite}
 @keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
 #update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
 #update-modal.open{display:flex}
@@ -393,11 +390,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #reconnect-overlay .rc-dots span:nth-child(3){animation-delay:.4s}
 @keyframes rc-pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
 </style>
-<div id="hud-toolbar">
-  <span id="hud-version" style="font-family:monospace;font-size:10px;color:#444;letter-spacing:.06em"></span>
-  <button class="hud-tb-btn" id="hud-update-badge" style="display:none" onclick="document.getElementById('update-modal').classList.add('open')">UPDATE AVAILABLE</button>
-  <button class="hud-tb-btn" id="restart-btn" title="Restart server &amp; regenerate dashboard">&#8635; Restart</button>
-</div>
+<button id="hud-update-badge" onclick="document.getElementById('update-modal').classList.add('open')">&#x2191; UPDATE AVAILABLE</button>
 <div id="update-modal">
   <div class="um-box">
     <div class="um-title">&#9650; Update Available</div>
@@ -483,8 +476,9 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     try {
       const vr = await fetch('/api/version');
       const vd = await vr.json();
-      const vEl = document.getElementById('hud-version');
-      if (vEl) vEl.textContent = 'v' + vd.current;
+      const cfgVer = document.getElementById('cfg-version-display');
+      if (cfgVer) cfgVer.textContent = 'v' + vd.current + (vd.hasUpdate ? '  (update available)' : '');
+      if (cfgVer && vd.hasUpdate) cfgVer.style.color = '#FF9900';
       document.getElementById('um-current').textContent = vd.current;
       document.getElementById('um-latest').textContent = vd.latest || '—';
       if (vd.hasUpdate) {
@@ -520,23 +514,6 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     es.onerror = function() { es.close(); btn.textContent = 'Error'; btn.disabled = false; };
   }
 
-  // Restart button
-  const restartBtn = document.getElementById('restart-btn');
-  const overlay = document.getElementById('reconnect-overlay');
-  if (restartBtn) {
-    restartBtn.addEventListener('click', async () => {
-      restartBtn.disabled = true;
-      overlay.classList.add('active');
-      try { await fetch('/api/restart', { method: 'POST' }); } catch {}
-      // Poll health until the new server is up, then reload
-      const poll = setInterval(async () => {
-        try {
-          const r = await fetch('/api/health');
-          if (r.ok) { clearInterval(poll); location.reload(); }
-        } catch {}
-      }, 600);
-    });
-  }
 })();
 </script>`;
       const bodyIdx = html.lastIndexOf('</body>');

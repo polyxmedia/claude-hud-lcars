@@ -2458,6 +2458,11 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 <span class="cfg-input" id="cfg-mode-display">STATIC</span>
               </div>
               <div class="cfg-row">
+                <span class="cfg-label">Version</span>
+                <span class="cfg-desc"></span>
+                <span class="cfg-input" id="cfg-version-display" style="color:var(--dim)">—</span>
+              </div>
+              <div class="cfg-row">
                 <span class="cfg-label">Stardate</span>
                 <span class="cfg-desc"></span>
                 <span class="cfg-input" style="color:var(--orange)">${stardate}</span>
