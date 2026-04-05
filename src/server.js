@@ -6,7 +6,7 @@ import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
 import { categorizeChange, resolveWatchPath, buildChangeEvent, buildHudEvent } from './lib/fileWatcher.js';
-import { findActiveSessionJsonl, readSessionTotalTokens, calcBurnRate, projectMinutesRemaining, formatBurnBar } from './lib/burnRate.js';
+import { findActiveSessionJsonl, readSessionTotalTokens, readCurrentContextTokens, calcBurnRate, projectMinutesRemaining, formatBurnBar } from './lib/burnRate.js';
 
 // CRC32 table built once at module load (used by solidPng)
 const _crc32Table = (() => {
@@ -59,7 +59,7 @@ function solidPng(size, r, g, b) {
 }
 
 const PORT = parseInt(process.env.PORT || '3200', 10);
-const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY || process.env.ANTHROPIC_API_KEY;
+const API_KEY = process.env.CLAUDE_DASHBOARD_API_KEY;
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
@@ -139,24 +139,21 @@ function tailHudEvents() {
 }
 
 // Burn rate broadcast — every 15s
+// Context window limit: Claude models have a 200k token context window.
+// We use the last assistant message's input_tokens as the current snapshot
+// (it's cumulative — it represents exactly what was sent to the model).
+const CONTEXT_LIMIT = 200_000;
 function broadcastBurnRate() {
   try {
     const jsonlPath = findActiveSessionJsonl(CLAUDE_DIR);
     if (!jsonlPath) return;
-    const tokens = readSessionTotalTokens(jsonlPath);
-    // Build 3 synthetic data points from the session total to approximate a rate
-    // (real rate tracking would need a rolling window; this is a best-effort estimate)
-    const LIMIT = 88000;
-    const pct = (tokens.total / LIMIT) * 100;
+    const current = readCurrentContextTokens(jsonlPath);
+    const pct = (current / CONTEXT_LIMIT) * 100;
     sseBroadcast({
       type: 'burn-rate',
       pct: Math.min(100, Math.round(pct * 10) / 10),
-      totalTokens: tokens.total,
-      input: tokens.input,
-      output: tokens.output,
-      cacheCreation: tokens.cacheCreation,
-      cacheRead: tokens.cacheRead,
-      limit: LIMIT,
+      totalTokens: current,
+      limit: CONTEXT_LIMIT,
       sessionPath: jsonlPath,
     });
   } catch { /* non-fatal */ }
@@ -354,8 +351,8 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #pwa-banner .pwa-close{background:transparent;color:#666;border:none;font-size:16px;padding:4px 8px;line-height:1}
 #pwa-banner .pwa-close:hover{color:#FF9900}
 #hud-toolbar{position:fixed;top:10px;right:14px;z-index:9998;display:flex;align-items:center;gap:6px}
-.hud-tb-btn{background:transparent;color:#FF9900;border:1px solid #FF9900;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:.45;transition:opacity .15s,background .15s}
-.hud-tb-btn:hover{opacity:1;background:#FF990011}
+.hud-tb-btn{background:#FF990018;color:#FF9900;border:1px solid rgba(255,153,0,0.6);padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1;transition:opacity .15s,background .15s,border-color .15s}
+.hud-tb-btn:hover{background:#FF990033;border-color:#FF9900}
 #hud-update-badge{background:#FF4400;color:#fff;border:none;opacity:1;animation:upd-pulse 2s ease-in-out infinite}
 @keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
 #update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
@@ -1109,10 +1106,91 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
   }
 
   // Chat API proxy with streaming
+  // Replicator — generate a Three.js scene from a natural language request
+  if (req.method === 'POST' && req.url === '/api/replicator') {
+    if (!API_KEY) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'CLAUDE_DASHBOARD_API_KEY not configured.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { prompt } = JSON.parse(body);
+        const systemPrompt = `You are the computer of a Star Trek molecular replicator. Your output drives a Three.js r134 3D canvas.
+
+Respond with ONLY valid JSON — no markdown fences, no text outside the object:
+{"code":"...","label":"...","description":"..."}
+
+Rules for the "code" field (Three.js r134, runs inside new Function('THREE','scene','camera', code)):
+- scene (THREE.Scene) already has exactly 3 children: index 0 AmbientLight, index 1 DirectionalLight, index 2 PointLight
+- Do NOT clear the scene — user objects are cleared before your code runs
+- Build the object using THREE.Mesh, THREE.Group, geometries, and materials
+- Use MeshPhongMaterial or MeshStandardMaterial with realistic hex colors
+- Center the composition at origin (0,0,0), scale to fit within a ~1.5-unit radius sphere
+- Compose from multiple meshes for realistic objects (e.g. cup body, rim, handle, liquid surface)
+- castShadow = true on visible meshes
+- No async, no imports, no fetch, must be synchronous, no semicolons-as-statements after function bodies
+- Valid JavaScript that can be passed verbatim to new Function()
+
+"label": dramatic Star Trek computer-voice uppercase, 3-7 words, e.g. "TEA. EARL GREY. HOT."
+"description": one sentence, dry computer acknowledgement, e.g. "Replication complete. Thermal ceramic vessel containing Camellia sinensis extract, 85°C."`;
+
+        const apiResp = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+        const apiData = await apiResp.json();
+        const rawText = apiData.content?.[0]?.text || '';
+        // Strip accidental markdown fences before parsing
+        const cleaned = rawText.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
+        // Try strict parse first, then attempt to rescue a truncated response
+        let parsed;
+        try {
+          parsed = JSON.parse(cleaned);
+        } catch {
+          // If the JSON was cut off mid-string, extract the code field with a regex
+          // and reconstruct a valid object so the canvas still gets something useful
+          const codeMatch = cleaned.match(/"code"\s*:\s*"((?:[^"\\]|\\[\s\S])*)/s);
+          const labelMatch = cleaned.match(/"label"\s*:\s*"([^"\\]*)"/);
+          const descMatch = cleaned.match(/"description"\s*:\s*"([^"\\]*)"/);
+          if (!codeMatch) throw new Error('Could not parse replicator response');
+          // Un-escape the extracted code (JSON string escapes → real chars)
+          let code = codeMatch[1];
+          try { code = JSON.parse('"' + code + '"'); } catch { /* leave as-is */ }
+          parsed = {
+            code,
+            label: labelMatch ? labelMatch[1] : 'PARTIAL REPLICATION',
+            description: descMatch ? descMatch[1] : 'Warning: response was truncated — model may be incomplete.',
+          };
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(parsed));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/chat') {
     if (!API_KEY) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set. Export it in your shell.' }));
+      res.end(JSON.stringify({ error: 'CLAUDE_DASHBOARD_API_KEY not set. Export it in your shell.' }));
       return;
     }
 
@@ -1233,7 +1311,7 @@ server.listen(PORT, () => {
   console.log('  ╚══════════════════════════════════════════╝');
   console.log('');
   if (!API_KEY) {
-    console.log('  Chat disabled. Set ANTHROPIC_API_KEY to enable.');
+    console.log('  Chat disabled. Set CLAUDE_DASHBOARD_API_KEY to enable.');
     console.log('');
   }
 

@@ -81,6 +81,33 @@ export function findActiveSessionJsonl(claudeDir) {
 }
 
 /**
+ * Read the most recent assistant message from a session .jsonl file and return
+ * its input_tokens (the current context window snapshot). This is the right
+ * metric for "how full is the context window right now" — each assistant turn's
+ * input_tokens is cumulative (it includes the full conversation history sent to
+ * the model), so the last one is the current context size.
+ *
+ * @param {string} jsonlPath
+ * @returns {number} current context window token count (0 if unreadable)
+ */
+export function readCurrentContextTokens(jsonlPath) {
+  let content;
+  try { content = fs.readFileSync(jsonlPath, 'utf-8'); } catch { return 0; }
+  const lines = content.split('\n').filter(l => l.trim());
+  // Walk backwards to find the last assistant message with usage
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const entry = JSON.parse(lines[i]);
+      if (entry.type !== 'assistant') continue;
+      const u = entry.message?.usage;
+      if (!u) continue;
+      return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    } catch { /* skip */ }
+  }
+  return 0;
+}
+
+/**
  * Project how many minutes remain given current token usage and burn rate.
  * Returns null if burn rate is 0 or negative. Returns 0 if limit already reached.
  *

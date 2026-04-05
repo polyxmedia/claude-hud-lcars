@@ -32,7 +32,7 @@ There's also a built-in AI chat that responds as the Federation LCARS computer. 
 npx claude-hud-lcars
 
 # Live mode with AI chat, voice, and file editing
-ANTHROPIC_API_KEY=sk-ant-... npx claude-hud-lcars --serve
+CLAUDE_DASHBOARD_API_KEY=sk-ant-... npx claude-hud-lcars --serve
 
 # Generate without opening
 npx claude-hud-lcars --no-open
@@ -80,13 +80,27 @@ The system prompt makes Claude respond as LCARS, the Library Computer Access and
 This requires the live server mode and an API key:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export CLAUDE_DASHBOARD_API_KEY=sk-ant-...
 npx claude-hud-lcars --serve
 ```
 
 That starts a local server at `http://localhost:3200`. The dashboard regenerates on every page load so it's always fresh, the chat proxies through to the Anthropic Messages API with streaming, and file operations work for opening and editing your Claude Code configs directly from the browser.
 
 Without an API key, the dashboard still works perfectly for browsing your setup. The COMPUTER bar just shows an offline message.
+
+### Why not `ANTHROPIC_API_KEY`?
+
+Claude Code uses its own `ANTHROPIC_API_KEY` environment variable (when running in API key mode) and also reads it for certain internal operations. If this dashboard read from the same variable, two things could go wrong:
+
+1. **Key collision** — if you've set `ANTHROPIC_API_KEY` for Claude Code, the dashboard would silently consume it for its own API calls, potentially burning through quota you didn't intend to use here.
+2. **Scope confusion** — `ANTHROPIC_API_KEY` is a well-known name that other tools and SDKs pick up automatically. A dedicated variable makes it explicit which key belongs to which tool.
+
+`CLAUDE_DASHBOARD_API_KEY` is only ever read by this dashboard's local server. It never touches your Claude Code session. Get a key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) and add it to your shell:
+
+```bash
+# Add to ~/.zshrc or ~/.zprofile
+export CLAUDE_DASHBOARD_API_KEY="sk-ant-..."
+```
 
 ## Actions
 
@@ -157,7 +171,7 @@ Options:
   --help, -h     Show help
 
 Environment:
-  ANTHROPIC_API_KEY    Required for chat (live mode)
+  CLAUDE_DASHBOARD_API_KEY    Required for chat (live mode)
   ELEVENLABS_API_KEY   Optional premium voice
   PORT                 Server port (default: 3200)
 ```
@@ -166,7 +180,7 @@ Environment:
 
 | Variable | Default | What it does |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | (none) | Required for COMPUTER bar chat. Get one from [console.anthropic.com](https://console.anthropic.com/) |
+| `CLAUDE_DASHBOARD_API_KEY` | (none) | Required for COMPUTER bar chat. Get one at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys). Intentionally separate from `ANTHROPIC_API_KEY` — see note in the COMPUTER bar section above. |
 | `CLAUDE_MODEL` | `claude-sonnet-4-6` | Which model the COMPUTER bar talks to (also configurable in the CONFIG panel) |
 | `PORT` | `3200` | Server port for live mode |
 | `CLAUDE_HUD_DIRS` | (none) | Extra directories to scan for `.mcp.json` files, colon-separated. e.g. `~/work:~/clients` |
