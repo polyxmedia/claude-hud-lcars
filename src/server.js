@@ -37,16 +37,35 @@ function solidPng(size, r, g, b) {
   ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
   const rowSize = 1 + size * 3;
   const raw = Buffer.alloc(size * rowSize);
+  // LCARS elbow icon: orange L-shape with concave inner quarter-circle
+  const sideW = Math.round(size * 0.292);  // left sidebar width  (~56/192)
+  const topH  = Math.round(size * 0.302);  // top bar height       (~58/192)
+  const elbowR = Math.round(size * 0.229); // concave radius       (~44/192)
+  // elbow arc centre is at (sideW, topH)
   for (let y = 0; y < size; y++) {
-    // filter byte 0 (None) + RGB per pixel
     const base = y * rowSize + 1;
     for (let x = 0; x < size; x++) {
-      // LCARS icon: left 40% orange sidebar, right area black with orange top bar
-      const isLeftBar = x < size * 0.35;
-      const isTopBar = !isLeftBar && y < size * 0.28;
-      const isBtmBar = !isLeftBar && y > size * 0.72;
-      let pr = 0, pg = 0, pb = 0;
-      if (isLeftBar || isTopBar || isBtmBar) { pr = r; pg = g; pb = b; }
+      const inSidebar = x < sideW;
+      const inTopBar  = y < topH && !inSidebar;
+      // concave cut-out: pixels in the bottom-right quadrant of the elbow arc that are NOT orange
+      const inElbowZone = x >= sideW && y >= topH;
+      const dx = x - sideW, dy = y - topH;
+      const inConcave = inElbowZone && (dx * dx + dy * dy) < elbowR * elbowR;
+      let pr = 0, pg = 0, pb = 0; // black default
+      if ((inSidebar || inTopBar) && !inConcave) { pr = r; pg = g; pb = b; } // orange
+      // Accent bars in content area (blue, lavender, tan)
+      else if (!inSidebar && !inTopBar && !inConcave) {
+        const cx = x - sideW - Math.round(size * 0.062); // content x offset
+        const barX = Math.round(size * 0.062);
+        if (cx >= barX) {
+          const relY = y - topH - Math.round(size * 0.062);
+          const barH = Math.round(size * 0.073);
+          const gap  = Math.round(size * 0.031);
+          if (relY >= 0 && relY < barH) { pr = 0x66; pg = 0x77; pb = 0xFF; }
+          else if (relY >= barH + gap && relY < barH * 2 + gap) { pr = 0xCC; pg = 0x99; pb = 0xCC; }
+          else if (relY >= barH * 2 + gap * 2 && relY < barH * 3 + gap * 2) { pr = 0xCC; pg = 0x99; pb = 0x66; }
+        }
+      }
       raw[base + x * 3] = pr; raw[base + x * 3 + 1] = pg; raw[base + x * 3 + 2] = pb;
     }
   }
@@ -226,12 +245,12 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
   if (req.method === 'GET' && req.url === '/icon.svg') {
     const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
   <rect width="192" height="192" fill="#000"/>
-  <rect x="0" y="0" width="60" height="192" rx="30" fill="#FF9900"/>
-  <rect x="70" y="0" width="122" height="50" rx="8" fill="#CC6600"/>
-  <rect x="70" y="60" width="122" height="12" rx="4" fill="#FF9900"/>
-  <rect x="70" y="82" width="80" height="12" rx="4" fill="#996633"/>
-  <rect x="70" y="104" width="122" height="50" rx="8" fill="#CC6600"/>
-  <rect x="70" y="164" width="122" height="28" rx="8" fill="#FF9900"/>
+  <!-- LCARS elbow: orange L-shape with concave inner quarter-circle -->
+  <path d="M 0 0 L 192 0 L 192 58 L 100 58 A 44 44 0 0 0 56 102 L 56 192 L 0 192 Z" fill="#FF9900"/>
+  <!-- Content accent bars -->
+  <rect x="68" y="114" width="108" height="14" rx="6" fill="#6677FF"/>
+  <rect x="68" y="136" width="76" height="14" rx="6" fill="#CC99CC"/>
+  <rect x="68" y="158" width="92" height="14" rx="6" fill="#CC9966"/>
 </svg>`;
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
     res.end(icon);
@@ -331,7 +350,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
         '<meta name="mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-title" content="Claude HUD">',
-        '<link rel="apple-touch-icon" href="/icon.svg">',
+        '<link rel="apple-touch-icon" href="/icon-192.png">',
         '<script>window.HUD_LIVE=true;window.HUD_ELEVENLABS=' + (!!ELEVEN_KEY) + ';</script>',
       ].join('');
       // Use lastIndexOf to safely handle any extra </head>/<body> tags in generated content
@@ -351,8 +370,8 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #pwa-banner .pwa-close{background:transparent;color:#666;border:none;font-size:16px;padding:4px 8px;line-height:1}
 #pwa-banner .pwa-close:hover{color:#FF9900}
 #hud-toolbar{position:fixed;top:10px;right:14px;z-index:9998;display:flex;align-items:center;gap:6px}
-.hud-tb-btn{background:#FF990018;color:#FF9900;border:1px solid rgba(255,153,0,0.6);padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1;transition:opacity .15s,background .15s,border-color .15s}
-.hud-tb-btn:hover{background:#FF990033;border-color:#FF9900}
+#hud-toolbar .hud-tb-btn{background:#FF990018!important;color:#FF9900!important;border:1px solid rgba(255,153,0,0.6)!important;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1!important;transition:opacity .15s,background .15s,border-color .15s}
+#hud-toolbar .hud-tb-btn:hover{background:#FF990033!important;border-color:#FF9900!important}
 #hud-update-badge{background:#FF4400;color:#fff;border:none;opacity:1;animation:upd-pulse 2s ease-in-out infinite}
 @keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
 #update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
