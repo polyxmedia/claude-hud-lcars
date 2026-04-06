@@ -2701,14 +2701,32 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
           <div class="about-section">
             <div class="about-section-head" style="color:var(--orange)">09 — What a good setup looks like</div>
             <p>There is no right answer, but here is a useful benchmark. A setup that is working well tends to have:</p>
-            <table class="about-table">
-              <tr><td style="color:var(--green);white-space:nowrap">A global CLAUDE.md</td><td>That captures your communication preferences and code style. If Claude ever does something you don't like, the fix is probably a line in this file.</td></tr>
-              <tr><td style="color:var(--green);white-space:nowrap">Per-project CLAUDE.md</td><td>That explains the codebase to Claude — what it does, how it's structured, what the tricky parts are.</td></tr>
-              <tr><td style="color:var(--green);white-space:nowrap">3-5 skills</td><td>For the things you ask Claude to do most often. Commit messages, code review, pre-deploy checks are good starting points.</td></tr>
-              <tr><td style="color:var(--green);white-space:nowrap">A Stop hook</td><td>That notifies you when Claude finishes. You should not be staring at the terminal waiting.</td></tr>
-              <tr><td style="color:var(--green);white-space:nowrap">At least one MCP server</td><td>That gives Claude access to something it can't do by default. Even just the filesystem server or fetch server expands what's possible significantly.</td></tr>
-              <tr><td style="color:var(--green);white-space:nowrap">Memory files</td><td>For any project you return to regularly. Claude should not have to rediscover the architecture every session.</td></tr>
-            </table>
+            <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
+              <div style="border-left:3px solid var(--green);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--green);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">A global CLAUDE.md</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">That captures your communication preferences and code style. If Claude ever does something you don't like, the fix is probably a line in this file.</div>
+              </div>
+              <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--cyan);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Per-project CLAUDE.md</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">That explains the codebase to Claude — what it does, how it's structured, what the tricky parts are.</div>
+              </div>
+              <div style="border-left:3px solid var(--blue);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--blue);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">3–5 skills</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">For the things you ask Claude to do most often. Commit messages, code review, pre-deploy checks are good starting points.</div>
+              </div>
+              <div style="border-left:3px solid var(--orange);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--orange);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">A Stop hook</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">That notifies you when Claude finishes. You should not be staring at the terminal waiting.</div>
+              </div>
+              <div style="border-left:3px solid var(--lavender);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--lavender);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">At least one MCP server</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">That gives Claude access to something it can't do by default. Even just the filesystem server or fetch server expands what's possible significantly.</div>
+              </div>
+              <div style="border-left:3px solid var(--peach);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--peach);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Memory files</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">For any project you return to regularly. Claude should not have to rediscover the architecture every session.</div>
+              </div>
+            </div>
             <p style="color:var(--dim);font-size:0.8rem;margin-top:10px">This dashboard shows you exactly which of these you have and which you don't. The gaps in SKILLS, HOOKS, and MEMORY sections are the most direct signal of where to spend time next.</p>
           </div>
 
