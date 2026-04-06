@@ -2541,7 +2541,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             <a class="about-link" href="https://github.com/polyxmedia/claude-hud-lcars" target="_blank"><span class="al-dot" style="background:var(--orange)"></span> GitHub</a>
           </div>
 
-          <div class="about-section">
+          <div class="about-section" style="margin-top:32px">
             <div class="about-section-head" style="color:var(--lavender)">Credits &amp; Inspiration</div>
             <p>
               The LCARS visual language was created by Michael Okuda for Star Trek: The Next Generation. This dashboard draws on that aesthetic — if you love the look, go explore the fan communities that have kept it alive:
