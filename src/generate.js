@@ -748,24 +748,24 @@ function gen() {
   });
 
   const sections = [
-    { id: 'skills', label: 'SKILLS', color: '#9999FF', count: skills.length },
-    { id: 'mcp', label: 'MCP SERVERS', color: '#FF9900', count: mcp.length },
-    { id: 'hooks', label: 'HOOKS', color: '#CC9966', count: hooks.length },
-    { id: 'plugins', label: 'PLUGINS', color: '#CC99CC', count: plugins.length },
-    { id: 'agents', label: 'AGENTS', color: '#FFCC99', count: agents.length },
-    { id: 'env', label: 'ENVIRONMENT', color: '#66CCCC', count: Object.keys(env).length },
-    { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
-    { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: projectHistory.length },
-    { id: 'claudemd', label: 'CLAUDE.MD', color: '#EE8844', count: claudeMds.length },
-    { id: 'membanks', label: 'MEMORY BANKS', color: '#66CCCC', count: memBanks.stats.total },
-    { id: 'market', label: 'MARKET', color: '#FF6644', count: marketItems.length },
-    { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
-    { id: 'q', label: 'Q', color: '#CC4444', count: null },
-    { id: 'replicator', label: 'REPLICATOR', color: '#CC99FF', count: null },
-    { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
-    { id: 'config', label: 'CONFIG', color: '#FFCC66', count: null },
-    { id: 'academy', label: 'ACADEMY', color: '#66CCCC', count: null },
-    { id: 'about', label: 'ABOUT', color: '#55CC55', count: null },
+    { id: 'skills',   label: 'SKILLS',       color: '#9999FF', count: skills.length },
+    { id: 'mcp',      label: 'MCP SERVERS',  color: '#FF9933', count: mcp.length },
+    { id: 'hooks',    label: 'HOOKS',        color: '#CC9966', count: hooks.length },
+    { id: 'plugins',  label: 'PLUGINS',      color: '#CC99CC', count: plugins.length },
+    { id: 'agents',   label: 'AGENTS',       color: '#FFCC99', count: agents.length },
+    { id: 'env',      label: 'ENVIRONMENT',  color: '#66CCCC', count: Object.keys(env).length },
+    { id: 'memory',   label: 'MEMORY',       color: '#9999CC', count: mem.length },
+    { id: 'sessions', label: 'SESSIONS',     color: '#FFCC66', count: projectHistory.length },
+    { id: 'claudemd', label: 'CLAUDE.MD',    color: '#FF9933', count: claudeMds.length },
+    { id: 'membanks', label: 'MEMORY BANKS', color: '#CC6699', count: memBanks.stats.total },
+    { id: 'market',   label: 'MARKET',       color: '#FF9966', count: marketItems.length },
+    { id: 'viz',      label: 'TACTICAL',     color: '#9999FF', count: null },
+    { id: 'q',        label: 'Q',            color: '#CC6666', count: null },
+    { id: 'replicator',label:'REPLICATOR',   color: '#9966FF', count: null },
+    { id: 'comms',    label: 'COMMS',        color: '#66CCCC', count: null },
+    { id: 'config',   label: 'CONFIG',       color: '#FFCC66', count: null },
+    { id: 'academy',  label: 'ACADEMY',      color: '#FFFF99', count: null },
+    { id: 'about',    label: 'ABOUT',        color: '#55CC55', count: null },
   ];
 
 return `<!DOCTYPE html>
@@ -781,10 +781,14 @@ return `<!DOCTYPE html>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#000;--text:#ccc;--dim:#666;--faint:#333;
-  --orange:#FF9900;--peach:#FFCC99;--blue:#6677FF;
+  /* Canonical LCARS palette */
+  --orange:#FF9933;--peach:#FFCC99;--blue:#6677FF;
   --lavender:#CC99CC;--tan:#CC9966;--salmon:#FF9966;
   --ltblue:#9999CC;--cyan:#66CCCC;--gold:#FFCC66;
-  --red:#CC4444;--green:#55CC55;--salmon:#FF9966;
+  --red:#CC6666;--green:#55CC55;
+  /* Additional canonical colors */
+  --melrose:#9999FF;--violet:#9966FF;--canary:#FFFF99;
+  --magenta:#CC6699;--mariner:#3366CC;
 }
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;font-size:14px;padding-top:8px}
 /* ═══ BOOT SEQUENCE ═══ */
@@ -3155,16 +3159,18 @@ function getAudio() {
 function lcarsBeep(freq, dur) {
   if (!isToggleOn('sound-toggle')) return;
   var ctx = getAudio();
+  _chirp(ctx, freq, ctx.currentTime, dur);
+}
+
+// Schedule a single sine chirp on existing AudioContext (no guard — callers handle that)
+function _chirp(ctx, freq, start, dur, vol) {
   var osc = ctx.createOscillator();
   var gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.frequency.value = freq;
-  osc.type = 'sine';
-  gain.gain.setValueAtTime(0.08, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = 'sine'; osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol || 0.09, start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  osc.start(start); osc.stop(start + dur);
 }
 
 function toggleBtn(btn) {
@@ -3330,11 +3336,65 @@ function _checkAmbPending() {
     window._ambPending = null;
   }
 }
-function beepNav() { _checkAmbPending(); if (_bootComplete) lcarsBeep(1200, 0.08); }
-function beepOpen() { if (_bootComplete) { lcarsBeep(800, 0.06); setTimeout(function(){lcarsBeep(1600, 0.06)}, 60); } }
-function beepAction() { if (_bootComplete) lcarsBeep(1000, 0.05); }
-function beepSend() { if (_bootComplete) { lcarsBeep(600, 0.05); setTimeout(function(){lcarsBeep(900, 0.08)}, 80); } }
-function beepReceive() { lcarsBeep(440, 0.12); }
+// TactileInputAcknowledge — canonical two-tone ascending panel tap
+function beepNav() {
+  _checkAmbPending();
+  if (!_bootComplete || !isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 1040, t,        0.065);
+  _chirp(ctx, 1480, t + 0.055, 0.075);
+}
+// Open/expand — triple ascending (panels opening)
+function beepOpen() {
+  if (!_bootComplete || !isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 800,  t,        0.055);
+  _chirp(ctx, 1200, t + 0.05, 0.055);
+  _chirp(ctx, 1800, t + 0.10, 0.065);
+}
+// Generic action — single clean mid tone
+function beepAction() {
+  if (!_bootComplete || !isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 1100, t, 0.06);
+}
+// Transmit/send — rising two-tone
+function beepSend() {
+  if (!_bootComplete || !isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 660, t,       0.055, 0.07);
+  _chirp(ctx, 990, t + 0.06, 0.09, 0.09);
+}
+// Incoming — soft single descending
+function beepReceive() {
+  if (!isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 880, t,       0.06, 0.07);
+  _chirp(ctx, 550, t + 0.07, 0.10, 0.05);
+}
+// TactileInputNegativeAcknowledge — descending negative feedback
+function beepError() {
+  if (!isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 800, t,       0.08, 0.10);
+  _chirp(ctx, 440, t + 0.09, 0.14, 0.08);
+}
+// Ready — canonical three-tone rising (boot complete, system ready)
+function beepReady() {
+  if (!isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 880,  t,        0.10, 0.08);
+  _chirp(ctx, 1100, t + 0.11, 0.10, 0.09);
+  _chirp(ctx, 1320, t + 0.22, 0.16, 0.10);
+}
+// Alert — three-tone alert pattern
+function beepAlert() {
+  if (!isToggleOn('sound-toggle')) return;
+  var ctx = getAudio(), t = ctx.currentTime;
+  _chirp(ctx, 880,  t,        0.08);
+  _chirp(ctx, 1320, t + 0.10, 0.08);
+  _chirp(ctx, 880,  t + 0.20, 0.12);
+}
 
 // Patch nav and open_ to add sounds
 var _origNav = nav;
@@ -3928,6 +3988,7 @@ function sendClaude(text) {
     return pump();
   }).catch(function(e) {
     _chatInProgress = false;
+    beepError();
     crBody.innerHTML = '<span style="color:var(--red)">ERROR: ' + esc(e.message) + '</span>';
     addMsg('err', 'COMMS ERROR: ' + e.message);
     btn.disabled = false;
@@ -5996,6 +6057,7 @@ function loadEnterprise() {
   setTimeout(function() {
     boot.classList.add('done');
     _bootComplete = true;
+    beepReady();
     setTimeout(function() { boot.remove(); }, 700);
   }, 3200);
 })();
