@@ -2874,6 +2874,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 })();
 const D=${escJ(D)};
 window._D=D;
+window._HOME=${escJ(os.homedir())};
 const VIZ=${JSON.stringify({
   skills: skills.map(s => ({ name: s.name, desc: (s.desc||'').slice(0,80), ver: s.ver, ctx: s.ctx })),
   agents: agents.map(a => ({ name: a.name, desc: (a.desc||'').slice(0,80) })),
@@ -5175,9 +5176,22 @@ function sendGlobal() {
   var activeBlockIdx = -1;
   var seenEvents = {};
 
-  var systemExtra = (window.HUD_PROJECTS_DIR && window.HUD_PROJECTS_CACHE)
+  // Build setup context from VIZ data so LCARS knows what exists
+  var setupCtx = '';
+  if (typeof VIZ !== 'undefined') {
+    var parts = [];
+    if (VIZ.skills && VIZ.skills.length) parts.push('Skills: ' + VIZ.skills.map(function(s){ return s.name; }).join(', '));
+    if (VIZ.agents && VIZ.agents.length) parts.push('Agents: ' + VIZ.agents.map(function(a){ return a.name; }).join(', '));
+    if (VIZ.mcp && VIZ.mcp.length) parts.push('MCP servers: ' + VIZ.mcp.map(function(m){ return m.name; }).join(', '));
+    if (VIZ.hooks && VIZ.hooks.length) parts.push('Hooks: ' + VIZ.hooks.map(function(h){ return (h.matcher||h.ev) + ':' + h.cmd.slice(0,40); }).join(' | '));
+    if (VIZ.mem && VIZ.mem.length) parts.push('Memory files: ' + VIZ.mem.map(function(m){ return m.name + '(' + m.proj + ')'; }).join(', '));
+    if (parts.length) setupCtx = '\\n\\nCurrent ship systems: ' + parts.join('. ');
+  }
+  var projCtx = (window.HUD_PROJECTS_DIR && window.HUD_PROJECTS_CACHE)
     ? ' Active missions (projects in ' + window.HUD_PROJECTS_DIR + '): ' + window.HUD_PROJECTS_CACHE
     : '';
+  var actionCtx = window.HUD_LIVE ? '\\n\\nACTION CAPABILITY: You can create and modify files in the user\\'s Claude Code setup. When the user asks you to create a skill, improve a skill, add a hook, create an agent, or update a CLAUDE.md file, output the file content wrapped in an <lcars-action> block like this:\\n\\n<lcars-action type="write-file" path="FULL_ABSOLUTE_PATH" description="one-line description of what this does">\\nFILE CONTENT HERE\\n</lcars-action>\\n\\nPaths must be under ~/.claude/. For skills use ~/.claude/skills/SKILL-NAME/SKILL.md. For agents use ~/.claude/agents/NAME.md. For global CLAUDE.md use ~/.claude/CLAUDE.md. For project CLAUDE.md use the path from the project list. Always explain what you are doing before the action block. The user will see a preview and must confirm before anything is written.' : '';
+  var systemExtra = setupCtx + projCtx + actionCtx;
 
   fetch('/api/chat', {
     method: 'POST',
@@ -5205,6 +5219,7 @@ function sendGlobal() {
           addMsg('ai', fullText);
           showLogButton();
           speak(fullText);
+          if (window.HUD_LIVE) parseLcarsActions(fullText);
           return;
         }
         buffer += decoder.decode(result.value, { stream: true });
@@ -6804,6 +6819,120 @@ setInterval(function() {
     renderBurnBar(0);
   }
 })();
+
+// ── LCARS action blocks ───────────────────────────────────────────────────────
+function parseLcarsActions(text) {
+  var actions = [];
+  var open = '<lcars-action';
+  var close = '</lcars-action>';
+  var pos = 0;
+  while (true) {
+    var start = text.indexOf(open, pos);
+    if (start === -1) break;
+    var tagEnd = text.indexOf('>', start);
+    if (tagEnd === -1) break;
+    var attrs = text.slice(start + open.length, tagEnd);
+    var contentStart = tagEnd + 1;
+    var end = text.indexOf(close, contentStart);
+    if (end === -1) break;
+    var content = text.slice(contentStart, end).trim();
+    var pathMatch = attrs.match(/path="([^"]+)"/);
+    var descMatch = attrs.match(/description="([^"]+)"/);
+    if (pathMatch) {
+      actions.push({ path: pathMatch[1], description: descMatch ? descMatch[1] : pathMatch[1], content: content });
+    }
+    pos = end + close.length;
+  }
+  if (actions.length === 0) return;
+  showActionConfirm(actions);
+}
+
+function showActionConfirm(actions) {
+  var existing = document.getElementById('lcars-action-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'lcars-action-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#07070d;border:2px solid #FF9900;padding:24px 28px;width:600px;max-width:96vw;max-height:80vh;display:flex;flex-direction:column;font-family:monospace;gap:12px';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'color:#FF9900;font-size:13px;text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid #1a1a1e;padding-bottom:10px';
+  title.textContent = '\\u25b2 COMPUTER PROPOSED ' + actions.length + ' FILE OPERATION' + (actions.length > 1 ? 'S' : '');
+  inner.appendChild(title);
+
+  var scrollArea = document.createElement('div');
+  scrollArea.style.cssText = 'overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px';
+
+  actions.forEach(function(action, idx) {
+    var block = document.createElement('div');
+    block.style.cssText = 'border:1px solid #1a1a1e;border-left:3px solid #66CCCC';
+
+    var header = document.createElement('div');
+    header.style.cssText = 'padding:8px 12px;background:#0a0a14;display:flex;justify-content:space-between;align-items:center;gap:8px';
+
+    var pathLabel = document.createElement('span');
+    pathLabel.style.cssText = 'color:#66CCCC;font-size:11px;word-break:break-all';
+    pathLabel.textContent = action.path;
+
+    var desc = document.createElement('span');
+    desc.style.cssText = 'color:#666;font-size:10px;white-space:nowrap';
+    desc.textContent = action.description;
+
+    header.appendChild(pathLabel);
+    header.appendChild(desc);
+    block.appendChild(header);
+
+    var pre = document.createElement('pre');
+    pre.style.cssText = 'margin:0;padding:10px 12px;font-size:10px;color:#88aa66;overflow-x:auto;max-height:180px;overflow-y:auto;background:#02020a;white-space:pre-wrap;word-break:break-word';
+    pre.textContent = action.content;
+    block.appendChild(pre);
+
+    scrollArea.appendChild(block);
+  });
+
+  inner.appendChild(scrollArea);
+
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #1a1a1e;padding-top:12px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.style.cssText = 'background:transparent;color:#666;border:1px solid #333;padding:6px 16px;font-family:monospace;font-size:11px;cursor:pointer;border-radius:2px';
+  cancelBtn.textContent = 'REJECT';
+  cancelBtn.onclick = function() { modal.remove(); };
+
+  var confirmBtn = document.createElement('button');
+  confirmBtn.style.cssText = 'background:#FF9900;color:#000;border:none;padding:6px 16px;font-family:monospace;font-size:11px;font-weight:bold;text-transform:uppercase;cursor:pointer;border-radius:2px';
+  confirmBtn.textContent = 'CONFIRM & WRITE';
+  confirmBtn.onclick = function() {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Writing...';
+    var promises = actions.map(function(action) {
+      return fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: action.path.replace(/^~/, window._HOME || ''), content: action.content, mkdir: true }),
+      }).then(function(r) { return r.json(); });
+    });
+    Promise.all(promises).then(function(results) {
+      var allOk = results.every(function(r) { return r.ok; });
+      modal.remove();
+      toast(allOk ? '\\u2713 ' + actions.length + ' file' + (actions.length > 1 ? 's' : '') + ' written' : 'Some writes failed — check console', allOk ? 2500 : 4000);
+      if (allOk) beepReceive();
+    }).catch(function(e) {
+      modal.remove();
+      toast('Write failed: ' + e.message, 4000);
+    });
+  };
+
+  btns.appendChild(cancelBtn);
+  btns.appendChild(confirmBtn);
+  inner.appendChild(btns);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+}
 
 // ── Update check ─────────────────────────────────────────────────────────────
 window.HUD_VERSION = '${PKG_VERSION}';
