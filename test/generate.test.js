@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1341,7 +1343,7 @@ describe('hlJson', () => {
 
 describe('generated dashboard', () => {
   test('inline JS has no syntax errors', () => {
-    const root = path.join(import.meta.dirname, '..');
+    const root = path.join(__dirname, '..');
     const html = execSync('node src/generate.js --no-open 2>/dev/null && cat dashboard.html', { cwd: root }).toString();
     const start = html.indexOf('<script>') + 8;
     const end = html.lastIndexOf('</script>');
