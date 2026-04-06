@@ -901,11 +901,20 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .brb-sep{color:rgba(255,153,0,0.35);margin:0 4px}
 .brb-time{min-width:80px}
 .brb-rate{color:var(--dim)}
-.brb-live{font-size:0.55rem;letter-spacing:0.15em;color:#66EE66;background:rgba(102,238,102,0.12);padding:1px 5px;border-radius:4px;margin-left:auto}
+.brb-live{font-size:0.55rem;letter-spacing:0.15em;color:#66EE66;background:rgba(102,238,102,0.12);padding:1px 5px;border-radius:4px;margin-left:auto;animation:lcars-blink 2s infinite}
+.brb-meter{display:flex;align-items:flex-end;gap:2px;height:18px;margin-left:8px}
+.brb-m-line{width:3px;background:var(--orange);border-radius:1px;height:6px;animation:lcars-bounce 1s ease-in-out infinite}
+@keyframes lcars-blink{0%,48%{opacity:1}50%,98%{opacity:0.25}100%{opacity:1}}
+@keyframes lcars-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(0.55)}}
+@keyframes lcars-bounce{0%,100%{height:6px}50%{height:22px}}
 
 /* ═══ MAIN AREA ═══ */
 .mn{grid-column:2;display:flex;gap:0;min-height:0;overflow:hidden;margin-top:6px}
-.mn-edge{width:72px;flex-shrink:0;display:flex;flex-direction:column;gap:3px;position:relative;background:none}
+.mn-edge{width:72px;flex-shrink:0;display:flex;flex-direction:column;gap:0;position:relative;background:none}
+.mne-p{flex-shrink:0;border-radius:0 16px 16px 0}
+.mne-p:first-child{border-radius:0 16px 0 0}
+.mne-p:last-child{border-radius:0 0 16px 0}
+.mne-b{height:6px;flex-shrink:0}
 
 .mn-content{flex:1;display:grid;grid-template-columns:1fr 0fr;transition:grid-template-columns 0.25s ease;min-height:0;overflow:hidden;gap:4px;margin-left:4px}
 .mn-content.open{grid-template-columns:1fr 1fr}
@@ -1933,13 +1942,28 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
   <span class="brb-sep">│</span>
   <span class="brb-rate" id="brb-rate">CONTEXT WINDOW</span>
   <span class="brb-live" id="brb-live" style="display:none">LIVE</span>
+  <div class="brb-meter" id="brb-meter" style="display:none">
+    <span class="brb-m-line" style="animation-delay:0s"></span>
+    <span class="brb-m-line" style="animation-delay:0.15s"></span>
+    <span class="brb-m-line" style="animation-delay:0.3s"></span>
+    <span class="brb-m-line" style="animation-delay:0.45s"></span>
+    <span class="brb-m-line" style="animation-delay:0.6s"></span>
+  </div>
 </div>
 
 <div class="mn">
   <div class="mn-edge">
-    <div style="background:var(--lavender);flex:5;border-radius:0 20px 0 0"></div>
-    <div style="background:var(--tan);flex:1"></div>
-    <div style="background:var(--lavender);flex:5;border-radius:0 0 20px 0"></div>
+    <div class="mne-p" style="background:var(--orange);flex:3"></div>
+    <div class="mne-b"></div>
+    <div class="mne-p" style="background:var(--peach);flex:1"></div>
+    <div class="mne-b"></div>
+    <div class="mne-p" style="background:var(--blue);flex:5"></div>
+    <div class="mne-b"></div>
+    <div class="mne-p" style="background:var(--lavender);flex:2"></div>
+    <div class="mne-b"></div>
+    <div class="mne-p" style="background:var(--tan);flex:1"></div>
+    <div class="mne-b"></div>
+    <div class="mne-p" style="background:var(--lavender);flex:4"></div>
   </div>
   <div class="mn-content" id="mc">
     <div class="ls">
@@ -6372,7 +6396,9 @@ setInterval(function() {
     var es = new EventSource('/api/events');
     es.onopen = function() {
       var liveEl = document.getElementById('brb-live');
+      var meterEl = document.getElementById('brb-meter');
       if (liveEl) liveEl.style.display = '';
+      if (meterEl) meterEl.style.display = 'flex';
     };
     es.onmessage = function(e) {
       try {
