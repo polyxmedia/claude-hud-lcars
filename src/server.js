@@ -5,6 +5,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
+import { fileURLToPath } from 'url';
+
+// import.meta.dirname is Node 20.11+; fall back for Node 18
+const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
 import { categorizeChange, resolveWatchPath, buildChangeEvent, buildHudEvent } from './lib/fileWatcher.js';
 import { findActiveSessionJsonl, readSessionTotalTokens, readCurrentContextTokens, calcBurnRate, projectMinutesRemaining, formatBurnBar } from './lib/burnRate.js';
 
@@ -90,15 +94,15 @@ if (process.env.CLAUDE_HUD_RESTART_DELAY) {
 }
 
 let PKG_VERSION = 'unknown';
-try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
+try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
 
 // Import the dashboard generator
-const dashboardPath = path.join(import.meta.dirname, '..', 'dashboard.html');
+const dashboardPath = path.join(__dirname, '..', 'dashboard.html');
 
 // Generate dashboard on startup
 async function generateDashboard() {
   const { execSync } = await import('child_process');
-  execSync('node ' + path.join(import.meta.dirname, 'generate.js') + ' --no-open', { stdio: 'pipe' });
+  execSync('node ' + path.join(__dirname, 'generate.js') + ' --no-open', { stdio: 'pipe' });
 }
 
 // ─── SSE live-events system ────────────────────────────────────────────────
