@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Pre-commit: run full test suite. Commit is blocked if anything fails.
+
+echo "⚡ Running tests..."
+
+node --test test/*.test.js
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Tests failed. Commit blocked."
+  echo "   Fix the failures above, then try again."
+  exit 1
+fi
+
+echo ""
+echo "✅ All tests passed."

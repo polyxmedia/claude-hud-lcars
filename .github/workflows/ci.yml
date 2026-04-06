@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Run tests
+        run: node --test test/*.test.js
+
+      - name: Check generated dashboard has no JS syntax errors
+        run: |
+          node src/generate.js --no-open
+          node -e "
+            const fs = require('fs');
+            const html = fs.readFileSync('dashboard.html', 'utf8');
+            const start = html.indexOf('<script>') + 8;
+            const end = html.lastIndexOf('</script>');
+            const js = html.slice(start, end);
+            fs.writeFileSync('/tmp/hud-check.js', js);
+          "
+          node --check /tmp/hud-check.js
+          echo "Dashboard JS syntax OK"
