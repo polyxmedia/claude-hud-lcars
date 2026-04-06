@@ -357,7 +357,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
       const headIdx = html.lastIndexOf('</head>');
       if (headIdx !== -1) html = html.slice(0, headIdx) + pwaHead + '</head>' + html.slice(headIdx + 7);
 
-      // Inject install/bookmark banner + SW registration before </body>
+      // Inject PWA banner, reconnect overlay, and server-only runUpdate() before </body>
       const pwaBanner = `
 <style>
 #pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:9999;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#0a0a0a;border-top:2px solid #FF9900;font-family:monospace;font-size:12px;color:#FF9900;letter-spacing:.05em}
@@ -369,19 +369,6 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #pwa-banner .pwa-bm:hover{background:#FF990022}
 #pwa-banner .pwa-close{background:transparent;color:#666;border:none;font-size:16px;padding:4px 8px;line-height:1}
 #pwa-banner .pwa-close:hover{color:#FF9900}
-#hud-update-badge{position:fixed;top:10px;right:14px;z-index:9998;background:#FF4400;color:#fff;border:none;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;opacity:1;display:none;animation:upd-pulse 2s ease-in-out infinite}
-@keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
-#update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
-#update-modal.open{display:flex}
-#update-modal .um-box{background:#07070d;border:2px solid #FF9900;padding:24px 28px;width:480px;max-width:94vw;font-family:monospace}
-#update-modal .um-title{font-size:13px;color:#FF9900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
-#update-modal .um-versions{display:flex;gap:16px;margin-bottom:16px;font-size:11px}
-#update-modal .um-v{color:var(--dim,#555)}
-#update-modal .um-v span{color:#eee}
-#update-modal .um-log{background:#02020a;border:1px solid #1a1a1e;padding:10px;height:140px;overflow-y:auto;font-size:10px;color:#88aa66;white-space:pre-wrap;display:none;margin-bottom:12px}
-#update-modal .um-actions{display:flex;gap:8px;justify-content:flex-end}
-#update-modal button{background:#FF9900;color:#000;border:none;padding:6px 16px;font-family:monospace;font-size:11px;font-weight:bold;text-transform:uppercase;cursor:pointer;border-radius:2px}
-#update-modal .um-cancel{background:transparent;color:#666;border:1px solid #333}
 #reconnect-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:monospace;color:#FF9900}
 #reconnect-overlay.active{display:flex}
 #reconnect-overlay .rc-title{font-size:14px;letter-spacing:.15em;text-transform:uppercase}
@@ -390,21 +377,6 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
 #reconnect-overlay .rc-dots span:nth-child(3){animation-delay:.4s}
 @keyframes rc-pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
 </style>
-<button id="hud-update-badge" onclick="document.getElementById('update-modal').classList.add('open')">&#x2191; UPDATE AVAILABLE</button>
-<div id="update-modal">
-  <div class="um-box">
-    <div class="um-title">&#9650; Update Available</div>
-    <div class="um-versions">
-      <div class="um-v">CURRENT <span id="um-current">—</span></div>
-      <div class="um-v">LATEST <span id="um-latest" style="color:#FF9900">—</span></div>
-    </div>
-    <div class="um-log" id="um-log"></div>
-    <div class="um-actions">
-      <button class="um-cancel" onclick="document.getElementById('update-modal').classList.remove('open')">Cancel</button>
-      <button id="um-run-btn" onclick="runUpdate()">Install Update</button>
-    </div>
-  </div>
-</div>
 <div id="reconnect-overlay">
   <div class="rc-title">Restarting LCARS</div>
   <div class="rc-dots"><span></span><span></span><span></span></div>
@@ -455,7 +427,6 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
   });
 
   bookmarkBtn.addEventListener('click', () => {
-    // Browsers block programmatic bookmark creation — just prompt the shortcut
     if (bmKey) { bmKey.textContent = isMac ? '— press now!' : '— press now!'; }
     setTimeout(() => { if (bmKey) bmKey.textContent = isMac ? '⌘D' : 'Ctrl+D'; }, 2000);
   });
@@ -471,26 +442,13 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 
-  // Version check
-  (async function() {
-    try {
-      const vr = await fetch('/api/version');
-      const vd = await vr.json();
-      const cfgVer = document.getElementById('cfg-version-display');
-      if (cfgVer) cfgVer.textContent = 'v' + vd.current + (vd.hasUpdate ? '  (update available)' : '');
-      if (cfgVer && vd.hasUpdate) cfgVer.style.color = '#FF9900';
-      document.getElementById('um-current').textContent = vd.current;
-      document.getElementById('um-latest').textContent = vd.latest || '—';
-      if (vd.hasUpdate) {
-        document.getElementById('hud-update-badge').style.display = 'inline-block';
-      }
-    } catch {}
-  })();
-
-  function runUpdate() {
+  // Server-side live install function (overrides static copy command)
+  window.runUpdate = function() {
     var log = document.getElementById('um-log');
     var btn = document.getElementById('um-run-btn');
-    log.style.display = 'block';
+    var sm = document.getElementById('um-static-msg');
+    if (sm) sm.style.display = 'none';
+    if (log) log.style.display = 'block';
     log.textContent = '';
     btn.disabled = true;
     btn.textContent = 'Installing...';
@@ -512,7 +470,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
       } catch {}
     };
     es.onerror = function() { es.close(); btn.textContent = 'Error'; btn.disabled = false; };
-  }
+  };
 
 })();
 </script>`;

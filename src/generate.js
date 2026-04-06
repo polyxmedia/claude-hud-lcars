@@ -7,6 +7,9 @@ import os from 'os';
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const OUTPUT = path.join(import.meta.dirname, '..', 'dashboard.html');
 
+let PKG_VERSION = 'unknown';
+try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
+
 // ── DATA COLLECTION (unchanged) ──
 
 function getSkills() {
@@ -6618,7 +6621,76 @@ setInterval(function() {
     renderBurnBar(0);
   }
 })();
+
+// ── Update check ─────────────────────────────────────────────────────────────
+window.HUD_VERSION = '${PKG_VERSION}';
+function copyUpdateCmd() {
+  try { navigator.clipboard.writeText('npx claude-hud-lcars@latest'); } catch {}
+  var btn = document.getElementById('um-run-btn');
+  if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy Command'; }, 2000); }
+}
+(async function() {
+  try {
+    var current = window.HUD_VERSION || '?';
+    var latest = current, hasUpdate = false;
+    if (window.HUD_LIVE) {
+      var vr = await fetch('/api/version');
+      var vd = await vr.json();
+      current = vd.current; latest = vd.latest; hasUpdate = vd.hasUpdate;
+    } else {
+      var nr = await fetch('https://registry.npmjs.org/claude-hud-lcars/latest');
+      var nd = await nr.json();
+      latest = nd.version || current;
+      hasUpdate = latest && latest !== current;
+    }
+    var cfgVer = document.getElementById('cfg-version-display');
+    if (cfgVer) { cfgVer.textContent = 'v' + current + (hasUpdate ? '  (update available)' : ''); if (hasUpdate) cfgVer.style.color = '#FF9900'; }
+    var elCur = document.getElementById('um-current'); if (elCur) elCur.textContent = current;
+    var elLat = document.getElementById('um-latest'); if (elLat) elLat.textContent = latest || '—';
+    if (hasUpdate) {
+      var badge = document.getElementById('hud-update-badge');
+      if (badge) badge.style.display = 'inline-block';
+      if (!window.HUD_LIVE) {
+        var sm = document.getElementById('um-static-msg'); if (sm) sm.style.display = 'block';
+        var btn2 = document.getElementById('um-run-btn'); if (btn2) btn2.textContent = 'Copy Command';
+      }
+    }
+  } catch {}
+})();
 </script>
+<style>
+#hud-update-badge{position:fixed;top:10px;right:14px;z-index:9998;background:#FF4400;color:#fff;border:none;padding:3px 9px;font-family:monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:3px;display:none;animation:upd-pulse 2s ease-in-out infinite}
+@keyframes upd-pulse{0%,100%{opacity:.85}50%{opacity:1}}
+#update-modal{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center}
+#update-modal.open{display:flex}
+#update-modal .um-box{background:#07070d;border:2px solid #FF9900;padding:24px 28px;width:480px;max-width:94vw;font-family:monospace}
+#update-modal .um-title{font-size:13px;color:#FF9900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
+#update-modal .um-versions{display:flex;gap:16px;margin-bottom:16px;font-size:11px}
+#update-modal .um-v{color:var(--dim,#555)}
+#update-modal .um-v span{color:#eee}
+#update-modal .um-log{background:#02020a;border:1px solid #1a1a1e;padding:10px;height:140px;overflow-y:auto;font-size:10px;color:#88aa66;white-space:pre-wrap;display:none;margin-bottom:12px}
+#update-modal .um-static-msg{font-size:11px;color:#666;margin-bottom:14px;display:none;line-height:1.6}
+#update-modal .um-static-msg code{color:#FF9900;background:#0a0a14;padding:2px 6px;border-radius:2px}
+#update-modal .um-actions{display:flex;gap:8px;justify-content:flex-end}
+#update-modal button{background:#FF9900;color:#000;border:none;padding:6px 16px;font-family:monospace;font-size:11px;font-weight:bold;text-transform:uppercase;cursor:pointer;border-radius:2px}
+#update-modal .um-cancel{background:transparent;color:#666;border:1px solid #333}
+</style>
+<button id="hud-update-badge" onclick="document.getElementById('update-modal').classList.add('open')">&#x2191; UPDATE AVAILABLE</button>
+<div id="update-modal">
+  <div class="um-box">
+    <div class="um-title">&#9650; Update Available</div>
+    <div class="um-versions">
+      <div class="um-v">CURRENT <span id="um-current">—</span></div>
+      <div class="um-v">LATEST <span id="um-latest" style="color:#FF9900">—</span></div>
+    </div>
+    <div class="um-log" id="um-log"></div>
+    <div class="um-static-msg" id="um-static-msg">To update, run:<br><code>npx claude-hud-lcars@latest</code></div>
+    <div class="um-actions">
+      <button class="um-cancel" onclick="document.getElementById('update-modal').classList.remove('open')">Close</button>
+      <button id="um-run-btn" onclick="typeof runUpdate==='function'?runUpdate():copyUpdateCmd()">Install Update</button>
+    </div>
+  </div>
+</div>
 </body></html>`;
 }
 
