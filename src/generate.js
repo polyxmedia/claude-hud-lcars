@@ -760,6 +760,7 @@ function gen() {
     { id: 'replicator', label: 'REPLICATOR', color: '#CC99FF', count: null },
     { id: 'comms', label: 'COMMS', color: '#FF9966', count: null },
     { id: 'config', label: 'CONFIG', color: '#FFCC66', count: null },
+    { id: 'academy', label: 'ACADEMY', color: '#66CCCC', count: null },
     { id: 'about', label: 'ABOUT', color: '#55CC55', count: null },
   ];
 
@@ -2585,6 +2586,128 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                 </span>
               </div>
             </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="sec" id="s-academy" style="overflow-y:auto;height:100%">
+        <div class="about" style="max-width:860px">
+
+          <div class="about-hero">
+            <div class="about-title" style="color:var(--cyan)">Starfleet Academy</div>
+            <div class="about-tagline">Everything you need to get from zero to fully operational. No prior experience required. If you can open a terminal, you can run this.</div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--orange)">01 — Getting started</div>
+            <p>You need Node.js 18 or later and Claude Code installed. That's it. No config files to write, no accounts to create, no build step.</p>
+            <p>Open a terminal and run one of these:</p>
+            <table class="about-table" style="margin-bottom:12px">
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">npx claude-hud-lcars</td><td>Generate the dashboard and open it in your browser. Static — no server, no API key needed.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">npx claude-hud-lcars --serve</td><td>Start a live server with AI chat, voice output, and file editing. Requires an API key (see below).</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">npm install -g claude-hud-lcars</td><td>Install globally so you can run <span style="color:var(--orange);font-family:monospace">claude-hud-lcars</span> from anywhere.</td></tr>
+            </table>
+            <p style="color:var(--dim);font-size:0.8rem">The dashboard reads everything from <span style="color:var(--blue);font-family:monospace">~/.claude/</span> — your skills, agents, hooks, MCP servers, memory files, sessions — and renders it all in one place. Every time you open it, it rescans and shows you the current state.</p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--cyan)">02 — The sidebar</div>
+            <p>Each button in the left sidebar takes you to a different section of your Claude Code setup. Click any row in a section and a detail panel slides open on the right showing the full content.</p>
+            <table class="about-table">
+              <tr><td style="color:var(--blue)">SKILLS</td><td>Custom slash commands you've built — things like <span style="font-family:monospace;color:var(--orange)">/commit</span> or <span style="font-family:monospace;color:var(--orange)">/code-review</span>. Click a skill to read its full prompt, then hit INVOKE to copy the slash command to your clipboard.</td></tr>
+              <tr><td style="color:var(--orange)">MCP SERVERS</td><td>Model Context Protocol servers extend what Claude can do — browse files, search the web, query databases. Shows every server from your settings and any project-level <span style="font-family:monospace;color:var(--orange)">.mcp.json</span> files. Env vars are redacted automatically.</td></tr>
+              <tr><td style="color:var(--tan)">HOOKS</td><td>Shell commands that run automatically when Claude does things — e.g. show a desktop notification when Claude finishes, or block dangerous commands before they run.</td></tr>
+              <tr><td style="color:var(--lavender)">PLUGINS</td><td>Installed Claude Code plugins and their active/inactive status.</td></tr>
+              <tr><td style="color:var(--peach)">AGENTS</td><td>Specialised sub-agents you've defined — each one has a specific role, tool access, and system prompt. Claude can spawn these automatically for subtasks.</td></tr>
+              <tr><td style="color:var(--cyan)">ENVIRONMENT</td><td>Environment variables configured in your Claude Code settings. Click any row to copy the value.</td></tr>
+              <tr><td style="color:var(--ltblue)">MEMORY</td><td>Memory files across all your projects — the markdown files Claude uses to persist context between sessions.</td></tr>
+              <tr><td style="color:var(--cyan)">MEMORY BANKS</td><td>Your personal knowledge store. Add entries with the <span style="font-family:monospace;color:var(--orange)">recall</span> CLI. Search them from the terminal. The computer remembers everything you tell it.</td></tr>
+              <tr><td style="color:var(--blue)">SESSIONS</td><td>Recent Claude Code sessions — which projects you've worked on, how many sessions each has, when the last activity was.</td></tr>
+              <tr><td style="color:var(--salmon)">CLAUDE.MD</td><td>Every CLAUDE.md file across your setup. These are the instruction files that shape how Claude behaves — global ones and per-project ones. Click any to read or edit.</td></tr>
+              <tr><td style="color:var(--blue)">TACTICAL</td><td>A force-directed graph of your entire setup. Every node is a thing — skill, agent, MCP server, hook. Every edge is a connection. Drag nodes around. Hover for details.</td></tr>
+              <tr><td style="color:var(--red)">Q</td><td>Q from the Q Continuum. He'll appear uninvited, roast your setup, and vanish. You can also summon him manually. Don't say we didn't warn you.</td></tr>
+              <tr><td style="color:var(--orange)">MARKET</td><td>Browse and install MCP servers. Local marketplace plus the official npm registry. Search, filter, one-click install into your settings.</td></tr>
+              <tr><td style="color:var(--gold)">CONFIG</td><td>Model selector, voice engine, ship name, ship theme, ambient noise, sound effects. All the knobs.</td></tr>
+            </table>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--orange)">03 — The COMPUTER bar</div>
+            <p>The input bar at the bottom of every screen. Type anything, hit Enter. It talks to the Claude API and streams a response in real time using the LCARS system prompt — calm, structured, Starfleet. The conversation logs to COMMS.</p>
+            <p>Requires live server mode and an API key:</p>
+            <p style="font-family:monospace;color:var(--orange);background:#0a0a14;padding:10px 14px;border-radius:4px;font-size:0.85rem">
+              export CLAUDE_DASHBOARD_API_KEY="sk-ant-..."<br>
+              npx claude-hud-lcars --serve
+            </p>
+            <p style="color:var(--dim);font-size:0.8rem">Get a key at console.anthropic.com/settings/keys. This uses a separate env var from Claude Code intentionally — so it never touches your Claude Code session or OAuth auth.</p>
+            <table class="about-table" style="margin-top:12px">
+              <tr><td style="color:var(--peach);white-space:nowrap">VOICE button</td><td>Activates voice output. Browser engine is free (Web Speech API). ElevenLabs gives you realistic AI voices — configure your key in CONFIG and preview voices before selecting.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">SFX button</td><td>LCARS sound effects on every interaction. Synthesized beeps via Web Audio API — no sound files, no external assets. On by default.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">AMB button</td><td>Synthesized Star Trek ambient noise — brown noise base with 60 Hz warp core oscillator and slow LFO breathing. Configurable in CONFIG.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">LOG button</td><td>Shows/hides the last computer response. Responses persist after streaming ends. Minimise to a slim bar or dismiss entirely.</td></tr>
+            </table>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--cyan)">04 — Search</div>
+            <p>Hit <span style="color:var(--orange);font-family:monospace">Cmd+K</span> (or <span style="font-family:monospace;color:var(--orange)">Ctrl+K</span> or <span style="font-family:monospace;color:var(--orange)">/</span>) from any screen. Searches across everything: skills, hooks, MCP servers, agents, memory files, sessions, CLAUDE.md content, environment variables. Results are colour-coded by type with match highlighting. Click to jump. Escape to close.</p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--orange)">05 — recall: the memory CLI</div>
+            <p>A command-line tool for logging and searching notes, insights, and context. Installed alongside the dashboard.</p>
+            <table class="about-table">
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">recall add "content"</td><td>Log a new memory entry. Add <span style="font-family:monospace;color:var(--cyan)">--tags tag1,tag2</span> to tag it, <span style="font-family:monospace;color:var(--cyan)">--source src</span> to track where it came from.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">echo "note" | recall add</td><td>Pipe content in. Useful from scripts or other tools.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">recall import notes.md</td><td>Bulk import from a file. Each paragraph becomes an entry. Also accepts .txt and .json.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">recall find "query"</td><td>Full-text search using TF-IDF scoring with recency decay (newer entries rank higher when relevance is equal). Add <span style="font-family:monospace;color:var(--cyan)">--from 2w</span> to filter by time, <span style="font-family:monospace;color:var(--cyan)">--tags eagle-eye</span> to filter by tag.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">recall list</td><td>Show recent entries. Add <span style="font-family:monospace;color:var(--cyan)">--limit N</span> to control how many.</td></tr>
+              <tr><td style="color:var(--orange);font-family:monospace;white-space:nowrap">recall stats</td><td>Total entries, how many today, last logged entry.</td></tr>
+            </table>
+            <p style="color:var(--dim);font-size:0.8rem;margin-top:10px">Everything is stored at <span style="color:var(--blue);font-family:monospace">~/.lcars/memory.json</span>. No size limit. No cleanup. The MEMORY BANKS panel in the sidebar shows a live summary.</p>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--cyan)">06 — Alert conditions</div>
+            <p>The dashboard watches for problems and changes the alert status accordingly:</p>
+            <table class="about-table">
+              <tr><td style="color:var(--red)">RED ALERT</td><td>Offline or broken MCP servers detected. Flashing red border and klaxon.</td></tr>
+              <tr><td style="color:#FFCC00)">YELLOW ALERT</td><td>Non-critical issues — missing configs, deprecated settings.</td></tr>
+              <tr><td style="color:var(--green)">CONDITION GREEN</td><td>All systems nominal.</td></tr>
+            </table>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--orange)">07 — Detail panel actions</div>
+            <p>When you click any row, the panel on the right shows the full content with action buttons at the top:</p>
+            <table class="about-table">
+              <tr><td style="color:var(--peach)">INVOKE</td><td>Copies <span style="font-family:monospace;color:var(--orange)">/skill-name</span> to clipboard. Paste it directly into Claude Code.</td></tr>
+              <tr><td style="color:var(--peach)">OPEN FILE</td><td>Opens the file in your default editor (live mode only). In static mode, copies the path.</td></tr>
+              <tr><td style="color:var(--peach)">COPY PATH</td><td>Copies the full file path.</td></tr>
+              <tr><td style="color:var(--peach)">COPY CONFIG</td><td>Copies the full JSON config for MCP servers and hooks.</td></tr>
+              <tr><td style="color:var(--peach)">EDIT</td><td>Opens an inline editor. Make changes and save back to disk without leaving the browser.</td></tr>
+              <tr><td style="color:var(--red)">DELETE</td><td>Deletes the item. Shows a confirmation dialog first. Can't be undone.</td></tr>
+            </table>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--cyan)">08 — Star Trek features</div>
+            <p>Because why not.</p>
+            <table class="about-table">
+              <tr><td style="color:var(--peach);white-space:nowrap">Boot sequence</td><td>Seven subsystems coming online on every load. Ascending beeps. Progress bar. "ALL SYSTEMS NOMINAL."</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">Ship naming</td><td>Name your workstation in CONFIG. Shows in the header and boot sequence. USS Enterprise, USS Defiant, whatever you want.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">Ship themes</td><td>Four palettes: Enterprise-D (classic TNG), Defiant (dark red/grey), Voyager (blue-shifted), Discovery (silver/blue). Instant swap.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">3D Enterprise-D</td><td>TACTICAL → ENTERPRISE. A real interactive 3D model via Sketchfab.</td></tr>
+              <tr><td style="color:var(--peach);white-space:nowrap">Q encounters</td><td>Random chance every 2 minutes. Red popup. Snap sound. He vanishes. There is no way to prevent this.</td></tr>
+            </table>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-head" style="color:var(--orange)">09 — Staying up to date</div>
+            <p>If you're using <span style="font-family:monospace;color:var(--orange)">npx</span>, you always get the latest version automatically — just re-run the command.</p>
+            <p>If installed globally: <span style="font-family:monospace;color:var(--orange)">npm update -g claude-hud-lcars</span></p>
+            <p>In live server mode, use CONFIG → Server Info → UPDATE to pull the latest and restart automatically. The dashboard shows a flashing badge in the top-right corner when a new version is available.</p>
           </div>
 
         </div>
