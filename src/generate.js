@@ -2482,7 +2482,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
         </div>
       </div>
 
-      <div class="sec" id="s-about" style="position:relative;overflow:hidden;height:100%">
+      <div class="sec" id="s-about" style="position:relative;overflow-y:auto;height:100%">
         <canvas id="viewscreen" style="position:absolute;inset:0;width:100%;height:100%;z-index:0"></canvas>
         <div class="about" style="position:relative;z-index:1">
           <div class="about-hero">
