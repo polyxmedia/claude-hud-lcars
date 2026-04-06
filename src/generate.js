@@ -2471,6 +2471,29 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
                   </div>
                 </span>
               </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Ambient Noise</span>
+                <span class="cfg-desc">Synthesized Star Trek engine hum — brown noise base, 60 Hz warp core oscillator, slow LFO breathing. No audio files.</span>
+                <span class="cfg-input">
+                  <div class="lcars-select" id="cfg-ambient-wrap">
+                    <button class="lcars-select-btn" onclick="toggleLcarsSelect('cfg-ambient-wrap')"><span>Off</span></button>
+                    <div class="lcars-dropdown">
+                      <div class="lcars-option selected" data-value="off" onclick="selectLcarsOption('cfg-ambient-wrap',this);onAmbientChange()">
+                        <span class="opt-label">Off</span>
+                      </div>
+                      <div class="lcars-option" data-value="low" onclick="selectLcarsOption('cfg-ambient-wrap',this);onAmbientChange()">
+                        <span class="opt-label">Low</span><span class="opt-sub">Subtle background hum</span>
+                      </div>
+                      <div class="lcars-option" data-value="medium" onclick="selectLcarsOption('cfg-ambient-wrap',this);onAmbientChange()">
+                        <span class="opt-label">Medium</span><span class="opt-sub">Bridge ambience</span>
+                      </div>
+                      <div class="lcars-option" data-value="high" onclick="selectLcarsOption('cfg-ambient-wrap',this);onAmbientChange()">
+                        <span class="opt-label">High</span><span class="opt-sub">Engine room</span>
+                      </div>
+                    </div>
+                  </div>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -2642,6 +2665,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
     <button class="tgl-btn on" id="cr-toggle" style="background:var(--tan);display:none" onclick="toggleCR()">LOG</button>
     <button class="tgl-btn off" id="voice-toggle" style="background:var(--salmon)" onclick="toggleVoice(this)">VOICE</button>
     <button class="tgl-btn on" id="sound-toggle" style="background:var(--blue)" onclick="toggleBtn(this)">SFX</button>
+    <button class="tgl-btn off" id="ambient-toggle" style="background:var(--lavender)" onclick="toggleAmbient(this)">AMB</button>
   </div>
 </div>
 
@@ -2945,13 +2969,163 @@ function toggleBtn(btn) {
   lcarsBeep(isOn ? 600 : 1200, 0.06);
 }
 
+/* ═══ AMBIENT NOISE ENGINE ═══
+   Synthesized Star Trek engine hum — no audio files.
+   Layers: brown noise base + 60Hz warp oscillator + harmonics + LFO breathing */
+var _amb = null;
+var _ambVol = 0.15;
+var _ambVolMap = { off: 0, low: 0.08, medium: 0.18, high: 0.38 };
+
+function _makeBrownNoise(ctx) {
+  var sr = ctx.sampleRate;
+  var buf = ctx.createBuffer(2, sr * 8, sr); // 8s stereo loop
+  for (var ch = 0; ch < 2; ch++) {
+    var d = buf.getChannelData(ch);
+    var last = 0;
+    for (var i = 0; i < d.length; i++) {
+      var w = Math.random() * 2 - 1;
+      d[i] = (last + 0.02 * w) / 1.02;
+      last = d[i];
+      d[i] *= 3.2;
+    }
+  }
+  return buf;
+}
+
+function startAmbient(vol) {
+  if (_amb) return;
+  var ctx = getAudio();
+  _ambVol = vol !== undefined ? vol : _ambVol;
+
+  // Brown noise
+  var noise = ctx.createBufferSource();
+  noise.buffer = _makeBrownNoise(ctx);
+  noise.loop = true;
+
+  // Low-pass — roll off anything above 300Hz for that muffled hull rumble
+  var lpf = ctx.createBiquadFilter();
+  lpf.type = 'lowpass'; lpf.frequency.value = 280; lpf.Q.value = 0.7;
+
+  // Bandpass resonance — emphasise the 60-80Hz warp core region
+  var bpf = ctx.createBiquadFilter();
+  bpf.type = 'bandpass'; bpf.frequency.value = 72; bpf.Q.value = 3.5;
+
+  var noiseGain = ctx.createGain(); noiseGain.gain.value = 0.55;
+
+  // Warp core oscillators — 60Hz fundamental + 2nd & 3rd harmonics slightly detuned
+  function makeOsc(freq, type, gain) {
+    var o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    var g = ctx.createGain(); g.gain.value = gain;
+    o.connect(g); return { osc: o, gain: g };
+  }
+  var o1 = makeOsc(60.3, 'sine', 0.28);
+  var o2 = makeOsc(120.1, 'sine', 0.10);
+  var o3 = makeOsc(180.7, 'sine', 0.04);
+  var o4 = makeOsc(59.7, 'sine', 0.12); // slight detune for beating effect
+
+  // LFO — 0.06Hz slow breathing of the engines
+  var lfo = ctx.createOscillator();
+  lfo.type = 'sine'; lfo.frequency.value = 0.06;
+  var lfoAmt = ctx.createGain(); lfoAmt.gain.value = 0.04;
+  lfo.connect(lfoAmt);
+
+  // Master gain
+  var master = ctx.createGain(); master.gain.value = _ambVol;
+  lfoAmt.connect(master.gain); // LFO modulates master gain
+
+  // Wire
+  noise.connect(lpf); lpf.connect(bpf); bpf.connect(noiseGain);
+  noiseGain.connect(master);
+  o1.gain.connect(master); o2.gain.connect(master);
+  o3.gain.connect(master); o4.gain.connect(master);
+  master.connect(ctx.destination);
+
+  // Start
+  noise.start(); lfo.start();
+  [o1, o2, o3, o4].forEach(function(o) { o.osc.start(); });
+
+  _amb = { noise: noise, lfo: lfo, oscs: [o1, o2, o3, o4], master: master, ctx: ctx };
+  document.getElementById('ambient-toggle').classList.replace('off','on');
+}
+
+function stopAmbient() {
+  if (!_amb) return;
+  var t = _amb.ctx.currentTime;
+  _amb.master.gain.setTargetAtTime(0, t, 0.8); // fade out
+  setTimeout(function() {
+    try { _amb.noise.stop(); _amb.lfo.stop(); _amb.oscs.forEach(function(o){o.osc.stop();}); } catch(e){}
+    _amb = null;
+  }, 3000);
+  var btn = document.getElementById('ambient-toggle');
+  if (btn) btn.classList.replace('on','off');
+}
+
+function onAmbientChange() {
+  var val = getSelectValue('cfg-ambient-wrap');
+  localStorage.setItem('hud-ambient', val);
+  var vol = _ambVolMap[val] || 0;
+  if (val === 'off') {
+    stopAmbient();
+  } else if (_amb) {
+    _ambVol = vol;
+    _amb.master.gain.setTargetAtTime(vol, _amb.ctx.currentTime, 1.2);
+    document.getElementById('ambient-toggle').classList.replace('off','on');
+  } else {
+    _ambVol = vol;
+    startAmbient(vol);
+  }
+}
+
+function toggleAmbient(btn) {
+  if (_amb) {
+    stopAmbient();
+    selectLcarsOptionByValue('cfg-ambient-wrap', 'off');
+    localStorage.setItem('hud-ambient', 'off');
+  } else {
+    var saved = localStorage.getItem('hud-ambient');
+    var vol = _ambVolMap[saved] || _ambVolMap['low'];
+    _ambVol = vol;
+    startAmbient(vol);
+    var level = (saved && saved !== 'off') ? saved : 'low';
+    selectLcarsOptionByValue('cfg-ambient-wrap', level);
+    localStorage.setItem('hud-ambient', level);
+  }
+}
+
+function getSelectValue(id) {
+  var el = document.getElementById(id);
+  var sel = el && el.querySelector('.lcars-option.selected');
+  return sel ? sel.getAttribute('data-value') : null;
+}
+
+function selectLcarsOptionByValue(id, val) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.querySelectorAll('.lcars-option').forEach(function(opt) {
+    var isMatch = opt.getAttribute('data-value') === val;
+    opt.classList.toggle('selected', isMatch);
+    if (isMatch) {
+      var btn = el.querySelector('.lcars-select-btn span');
+      if (btn) btn.textContent = opt.querySelector('.opt-label').textContent;
+    }
+  });
+}
+
 function isToggleOn(id) {
   var btn = document.getElementById(id);
   return btn && btn.classList.contains('on');
 }
 
 var _bootComplete = false;
-function beepNav() { if (_bootComplete) lcarsBeep(1200, 0.08); }
+function _checkAmbPending() {
+  if (window._ambPending) {
+    var vol = _ambVolMap[window._ambPending] || _ambVolMap['low'];
+    _ambVol = vol;
+    startAmbient(vol);
+    window._ambPending = null;
+  }
+}
+function beepNav() { _checkAmbPending(); if (_bootComplete) lcarsBeep(1200, 0.08); }
 function beepOpen() { if (_bootComplete) { lcarsBeep(800, 0.06); setTimeout(function(){lcarsBeep(1600, 0.06)}, 60); } }
 function beepAction() { if (_bootComplete) lcarsBeep(1000, 0.05); }
 function beepSend() { if (_bootComplete) { lcarsBeep(600, 0.05); setTimeout(function(){lcarsBeep(900, 0.08)}, 80); } }
@@ -3643,6 +3817,13 @@ function loadConfig() {
     if (cfg.sfx === 'off') {
       setLcarsValue('cfg-sfx-wrap', 'off');
       onSfxChange();
+    }
+    // Restore ambient setting — can only start after a user gesture so flag it
+    var savedAmb = localStorage.getItem('hud-ambient');
+    if (savedAmb && savedAmb !== 'off') {
+      selectLcarsOptionByValue('cfg-ambient-wrap', savedAmb);
+      // Will auto-start on first user interaction via _ambPending flag
+      window._ambPending = savedAmb;
     }
     if (cfg.shipName) {
       var sn = document.getElementById('cfg-ship-name');
