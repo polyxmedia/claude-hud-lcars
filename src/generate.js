@@ -2608,12 +2608,24 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             <p>Claude reads your CLAUDE.md files at the start of every session. They are standing orders. Whatever you put in there, Claude will follow every single time without you having to repeat it.</p>
             <p>Go to <span style="color:var(--cyan);font-weight:bold">CLAUDE.MD</span> in the sidebar. You will see every instruction file across your setup — the global one that applies everywhere and per-project ones that apply to specific codebases. Click any of them to read what they say right now.</p>
             <p>Things worth putting in your global CLAUDE.md:</p>
-            <table class="about-table">
-              <tr><td style="color:var(--peach);white-space:nowrap">Code style</td><td>The exact conventions you want followed — indentation, naming, patterns you like, patterns you hate. Claude will apply them without being asked.</td></tr>
-              <tr><td style="color:var(--peach);white-space:nowrap">Communication style</td><td>How you want Claude to talk to you. Short answers or detailed? Show reasoning or just the result? Ask before acting or proceed and report?</td></tr>
-              <tr><td style="color:var(--peach);white-space:nowrap">What not to do</td><td>Things Claude tends to do that annoy you. Write them down once and they stop.</td></tr>
-              <tr><td style="color:var(--peach);white-space:nowrap">Project context</td><td>In a per-project CLAUDE.md: what the codebase is, what the architecture decisions were, what areas are fragile, what the deploy process is.</td></tr>
-            </table>
+            <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
+              <div style="border-left:3px solid var(--peach);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--peach);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Code style</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">The exact conventions you want followed — indentation, naming, patterns you like, patterns you hate. Claude will apply them without being asked.</div>
+              </div>
+              <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--cyan);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Communication style</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">How you want Claude to talk to you. Short answers or detailed? Show reasoning or just the result? Ask before acting or proceed and report?</div>
+              </div>
+              <div style="border-left:3px solid var(--salmon);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--salmon);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">What not to do</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">Things Claude tends to do that annoy you. Write them down once and they stop.</div>
+              </div>
+              <div style="border-left:3px solid var(--orange);padding:10px 14px;background:#0a0a0f">
+                <div style="color:var(--orange);font-family:'Antonio',sans-serif;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Project context</div>
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.6">In a per-project CLAUDE.md: what the codebase is, what the architecture decisions were, what areas are fragile, what the deploy process is.</div>
+              </div>
+            </div>
             <p style="color:var(--dim);font-size:0.8rem;margin-top:10px">Hit EDIT on any CLAUDE.md to change it directly from this panel. Changes take effect in the next Claude session.</p>
           </div>
 
