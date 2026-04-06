@@ -23,8 +23,8 @@ const _crc32Table = (() => {
   return t;
 })();
 
-// Minimal solid-color PNG generator (no external deps) — used for PWA icons
-function solidPng(size, r, g, b) {
+// LCARS icon PNG generator (no external deps)
+function solidPng(size) {
   function crc32(buf) {
     let c = 0xffffffff;
     for (const b of buf) c = _crc32Table[(c ^ b) & 0xff] ^ (c >>> 8);
@@ -39,36 +39,35 @@ function solidPng(size, r, g, b) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+
+  // LCARS elbow: bold L-shape (38% arm width) with perfect inscribed quarter-circle concave
+  const armW = Math.round(size * 0.38);
+  const arcR = armW; // arc radius equals arm width — symmetric, clean quarter circle
+  const cH   = size - armW; // content area height
+  // Three bold horizontal bands in content area
+  const bH    = Math.round(cH * 0.22);
+  const bGap  = Math.round(cH * 0.07);
+  const bOff  = Math.round(cH * 0.06); // top offset before first band
+
   const rowSize = 1 + size * 3;
   const raw = Buffer.alloc(size * rowSize);
-  // LCARS elbow icon: orange L-shape with concave inner quarter-circle
-  const sideW = Math.round(size * 0.292);  // left sidebar width  (~56/192)
-  const topH  = Math.round(size * 0.302);  // top bar height       (~58/192)
-  const elbowR = Math.round(size * 0.229); // concave radius       (~44/192)
-  // elbow arc centre is at (sideW, topH)
   for (let y = 0; y < size; y++) {
     const base = y * rowSize + 1;
     for (let x = 0; x < size; x++) {
-      const inSidebar = x < sideW;
-      const inTopBar  = y < topH && !inSidebar;
-      // concave cut-out: pixels in the bottom-right quadrant of the elbow arc that are NOT orange
-      const inElbowZone = x >= sideW && y >= topH;
-      const dx = x - sideW, dy = y - topH;
-      const inConcave = inElbowZone && (dx * dx + dy * dy) < elbowR * elbowR;
-      let pr = 0, pg = 0, pb = 0; // black default
-      if ((inSidebar || inTopBar) && !inConcave) { pr = r; pg = g; pb = b; } // orange
-      // Accent bars in content area (blue, lavender, tan)
-      else if (!inSidebar && !inTopBar && !inConcave) {
-        const cx = x - sideW - Math.round(size * 0.062); // content x offset
-        const barX = Math.round(size * 0.062);
-        if (cx >= barX) {
-          const relY = y - topH - Math.round(size * 0.062);
-          const barH = Math.round(size * 0.073);
-          const gap  = Math.round(size * 0.031);
-          if (relY >= 0 && relY < barH) { pr = 0x66; pg = 0x77; pb = 0xFF; }
-          else if (relY >= barH + gap && relY < barH * 2 + gap) { pr = 0xCC; pg = 0x99; pb = 0xCC; }
-          else if (relY >= barH * 2 + gap * 2 && relY < barH * 3 + gap * 2) { pr = 0xCC; pg = 0x99; pb = 0x66; }
-        }
+      const dx = x - armW, dy = y - armW;
+      const inConcave = dx >= 0 && dy >= 0 && (dx * dx + dy * dy) < arcR * arcR;
+      let pr = 0, pg = 0, pb = 0;
+      if (inConcave) {
+        // black cutout — nothing
+      } else if (x < armW || y < armW) {
+        // orange LCARS elbow arms
+        pr = 0xFF; pg = 0x99; pb = 0x00;
+      } else {
+        // content area — three bold coloured bands
+        const relY = y - armW - bOff;
+        if      (relY >= 0           && relY < bH)              { pr = 0x66; pg = 0x77; pb = 0xFF; } // blue
+        else if (relY >= bH + bGap   && relY < 2*bH + bGap)    { pr = 0xCC; pg = 0x99; pb = 0xCC; } // lavender
+        else if (relY >= 2*(bH+bGap) && relY < 3*bH + 2*bGap) { pr = 0xCC; pg = 0x99; pb = 0x66; } // tan
       }
       raw[base + x * 3] = pr; raw[base + x * 3 + 1] = pg; raw[base + x * 3 + 2] = pb;
     }
@@ -264,13 +263,13 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
   // App icons as PNG (Chrome requires PNG for PWA install prompt)
   if (req.method === 'GET' && req.url === '/icon-192.png') {
     res.writeHead(200, { 'Content-Type': 'image/png' });
-    res.end(solidPng(192, 0xFF, 0x99, 0x00));
+    res.end(solidPng(192));
     return;
   }
 
   if (req.method === 'GET' && req.url === '/icon-512.png') {
     res.writeHead(200, { 'Content-Type': 'image/png' });
-    res.end(solidPng(512, 0xFF, 0x99, 0x00));
+    res.end(solidPng(512));
     return;
   }
 

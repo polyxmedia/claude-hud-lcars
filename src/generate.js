@@ -924,7 +924,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .st:last-child{border-right:none;border-radius:0 20px 20px 0}
 .stb-cap{width:80px;background:var(--tan);flex-shrink:0;border-radius:24px}
 .st-n{font-family:'Antonio',sans-serif;font-size:1.5rem;font-weight:700;color:var(--orange);line-height:1}
-.st-l{font-size:0.55rem;color:var(--peach);opacity:0.7;text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
+.st-l{font-size:0.6rem;color:var(--text);text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
 
 /* ═══ BURN RATE BAR ═══ */
 .brb{grid-column:2;display:flex;align-items:center;gap:10px;padding:4px 16px 4px 80px;background:var(--bg);font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.08em;color:var(--dim);min-height:26px}

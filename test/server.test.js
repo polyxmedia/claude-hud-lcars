@@ -20,7 +20,7 @@ const _crc32Table = (() => {
   return t;
 })();
 
-function solidPng(size, r, g, b) {
+function solidPng(size) {
   function crc32(buf) {
     let c = 0xffffffff;
     for (const b of buf) c = _crc32Table[(c ^ b) & 0xff] ^ (c >>> 8);
@@ -35,16 +35,27 @@ function solidPng(size, r, g, b) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const armW = Math.round(size * 0.38);
+  const arcR = armW;
+  const cH   = size - armW;
+  const bH   = Math.round(cH * 0.22);
+  const bGap = Math.round(cH * 0.07);
+  const bOff = Math.round(cH * 0.06);
   const rowSize = 1 + size * 3;
   const raw = Buffer.alloc(size * rowSize);
   for (let y = 0; y < size; y++) {
     const base = y * rowSize + 1;
     for (let x = 0; x < size; x++) {
-      const isLeftBar = x < size * 0.35;
-      const isTopBar = !isLeftBar && y < size * 0.28;
-      const isBtmBar = !isLeftBar && y > size * 0.72;
+      const dx = x - armW, dy = y - armW;
+      const inConcave = dx >= 0 && dy >= 0 && (dx * dx + dy * dy) < arcR * arcR;
       let pr = 0, pg = 0, pb = 0;
-      if (isLeftBar || isTopBar || isBtmBar) { pr = r; pg = g; pb = b; }
+      if (!inConcave && (x < armW || y < armW)) { pr = 0xFF; pg = 0x99; pb = 0x00; }
+      else if (!inConcave && x >= armW && y >= armW) {
+        const relY = y - armW - bOff;
+        if      (relY >= 0           && relY < bH)              { pr = 0x66; pg = 0x77; pb = 0xFF; }
+        else if (relY >= bH + bGap   && relY < 2*bH + bGap)    { pr = 0xCC; pg = 0x99; pb = 0xCC; }
+        else if (relY >= 2*(bH+bGap) && relY < 3*bH + 2*bGap) { pr = 0xCC; pg = 0x99; pb = 0x66; }
+      }
       raw[base + x * 3] = pr; raw[base + x * 3 + 1] = pg; raw[base + x * 3 + 2] = pb;
     }
   }
@@ -107,50 +118,48 @@ function filterByName(suggestions, installedNames) {
 
 describe('solidPng', () => {
   test('returns a Buffer', () => {
-    assert.ok(Buffer.isBuffer(solidPng(4, 255, 0, 0)));
+    assert.ok(Buffer.isBuffer(solidPng(4)));
   });
 
   test('starts with PNG magic bytes', () => {
-    const buf = solidPng(4, 255, 153, 0);
+    const buf = solidPng(4);
     assert.deepEqual([...buf.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
   test('IHDR chunk encodes correct width and height', () => {
     const size = 16;
-    const buf = solidPng(size, 255, 153, 0);
+    const buf = solidPng(size);
     // Layout: 8-byte sig | 4-byte len | 4-byte 'IHDR' | 13-byte data (width@0, height@4)
     assert.equal(buf.readUInt32BE(16), size, 'width');
     assert.equal(buf.readUInt32BE(20), size, 'height');
   });
 
   test('bit depth is 8 and color type is 2 (RGB)', () => {
-    const buf = solidPng(8, 0, 0, 255);
+    const buf = solidPng(8);
     // bit depth at byte 24, color type at byte 25
     assert.equal(buf[24], 8, 'bit depth');
     assert.equal(buf[25], 2, 'color type RGB');
   });
 
   test('larger size produces larger buffer', () => {
-    assert.ok(solidPng(64, 255, 153, 0).length > solidPng(16, 255, 153, 0).length);
+    assert.ok(solidPng(64).length > solidPng(16).length);
   });
 
   test('ends with IEND chunk (last 12 bytes)', () => {
-    const buf = solidPng(4, 255, 153, 0);
+    const buf = solidPng(4);
     // IEND: 4-byte len=0, 4-byte 'IEND', 4-byte CRC
     const tail = buf.slice(-12);
     assert.equal(tail.readUInt32BE(0), 0, 'IEND data length must be 0');
     assert.equal(tail.slice(4, 8).toString('ascii'), 'IEND');
   });
 
-  test('different color values produce different buffers', () => {
-    const red = solidPng(8, 255, 0, 0);
-    const blue = solidPng(8, 0, 0, 255);
-    assert.notDeepEqual(red, blue);
+  test('different sizes produce different buffers', () => {
+    assert.notDeepEqual(solidPng(8), solidPng(16));
   });
 
   test('192x192 and 512x512 sizes do not throw', () => {
-    assert.doesNotThrow(() => solidPng(192, 0xFF, 0x99, 0x00));
-    assert.doesNotThrow(() => solidPng(512, 0xFF, 0x99, 0x00));
+    assert.doesNotThrow(() => solidPng(192));
+    assert.doesNotThrow(() => solidPng(512));
   });
 });
 
