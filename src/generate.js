@@ -6,6 +6,8 @@ import os from 'os';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const OUTPUT = path.join(import.meta.dirname, '..', 'dashboard.html');
+const LCARS_MEMORY_DIR = path.join(os.homedir(), '.lcars');
+const LCARS_MEMORY_PATH = path.join(LCARS_MEMORY_DIR, 'memory.json');
 
 let PKG_VERSION = 'unknown';
 try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
@@ -477,6 +479,18 @@ function getProjectHistory() {
 
 function getEnv(s) { return s?.env || {}; }
 
+function getMemoryBanks() {
+  try {
+    if (!fs.existsSync(LCARS_MEMORY_PATH)) return { entries: [], stats: { total: 0, today: 0, lastEntry: null } };
+    const raw = JSON.parse(fs.readFileSync(LCARS_MEMORY_PATH, 'utf-8'));
+    const entries = Array.isArray(raw.entries) ? raw.entries : [];
+    const today = new Date().toISOString().slice(0, 10);
+    const todayCount = entries.filter(e => e.timestamp && e.timestamp.slice(0, 10) === today).length;
+    const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+    return { entries, stats: { total: entries.length, today: todayCount, lastEntry } };
+  } catch { return { entries: [], stats: { total: 0, today: 0, lastEntry: null } }; }
+}
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escJ(s) { return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/`/g,'\\u0060').replace(/\$/g,'\\u0024'); }
 // escJ output safe for placement inside a double-quoted HTML attribute
@@ -491,6 +505,7 @@ function gen() {
   const mem = getMemoryFiles(), sessions = getSessionCount();
   const sessionList = getSessions(), history = getHistory(), claudeMds = getClaudeMdFiles();
   const projectHistory = getProjectHistory();
+  const memBanks = getMemoryBanks();
   const ts = new Date().toISOString().replace('T',' ').slice(0,19)+'Z';
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
 
@@ -689,6 +704,17 @@ function gen() {
       ]};
   });
 
+  // Memory Banks entries
+  memBanks.entries.forEach((e, i) => {
+    const tags = (e.tags || []).join(', ') || 'none';
+    const date = e.timestamp ? new Date(e.timestamp).toISOString().replace('T',' ').slice(0,19) : 'unknown';
+    D['mb:'+i] = { t: e.content.slice(0, 60) + (e.content.length > 60 ? '…' : ''),
+      tp: 'MEMORY ENTRY // ' + (e.source || 'manual').toUpperCase(),
+      m: date + (e.tags && e.tags.length ? ' // ' + tags : ''),
+      b: e.content + '\n\n**ID:** ' + e.id + '\n\n**Source:** ' + (e.source || 'manual') + '\n\n**Tags:** ' + tags + (e.context ? '\n\n**Context:** ' + e.context : ''),
+      actions: [] };
+  });
+
   // CLAUDE.md files
   claudeMds.forEach((c, i) => {
     const h = c.health;
@@ -727,6 +753,7 @@ function gen() {
     { id: 'memory', label: 'MEMORY', color: '#9999CC', count: mem.length },
     { id: 'sessions', label: 'SESSIONS', color: '#88AACC', count: projectHistory.length },
     { id: 'claudemd', label: 'CLAUDE.MD', color: '#EE8844', count: claudeMds.length },
+    { id: 'membanks', label: 'MEMORY BANKS', color: '#66CCCC', count: memBanks.stats.total },
     { id: 'market', label: 'MARKET', color: '#FF6644', count: marketItems.length },
     { id: 'viz', label: 'TACTICAL', color: '#55AAFF', count: null },
     { id: 'q', label: 'Q', color: '#CC4444', count: null },
@@ -892,7 +919,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .st:last-child{border-right:none;border-radius:0 20px 20px 0}
 .stb-cap{width:80px;background:var(--tan);flex-shrink:0;border-radius:24px}
 .st-n{font-family:'Antonio',sans-serif;font-size:1.5rem;font-weight:700;color:var(--orange);line-height:1}
-.st-l{font-size:0.55rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
+.st-l{font-size:0.55rem;color:var(--peach);opacity:0.7;text-transform:uppercase;letter-spacing:0.12em;margin-top:2px}
 
 /* ═══ BURN RATE BAR ═══ */
 .brb{grid-column:2;display:flex;align-items:center;gap:10px;padding:4px 16px 4px 80px;background:var(--bg);font-family:'Antonio',sans-serif;font-size:0.7rem;letter-spacing:0.08em;color:var(--dim);min-height:26px}
@@ -2194,6 +2221,37 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
             ${h.praise.length && !h.issues.length ? `<div class="health-praise" style="padding:0 16px 8px">${h.praise.map(p => '✓ ' + esc(p)).join(' · ')}</div>` : ''}
           </div>`;
         }).join('')}
+      </div>
+
+      <div class="sec" id="s-membanks">
+        <div class="sec-h"><span>Memory Banks // Recall Subsystem</span></div>
+        <div class="mcp-overview">
+          <div class="mcp-overview-stat">
+            <div class="mcp-overview-n total">${String(memBanks.stats.total).padStart(3,'0')}</div>
+            <div class="mcp-overview-l">Total Entries</div>
+          </div>
+          <div class="mcp-overview-stat">
+            <div class="mcp-overview-n green">${String(memBanks.stats.today).padStart(3,'0')}</div>
+            <div class="mcp-overview-l">Today</div>
+          </div>
+          <div class="mcp-overview-stat">
+            <div class="mcp-overview-n orange" style="font-size:1rem;padding-top:4px">${memBanks.stats.lastEntry ? (new Date(memBanks.stats.lastEntry.timestamp).toISOString().slice(0,10)) : '—'}</div>
+            <div class="mcp-overview-l">Last Activity</div>
+          </div>
+        </div>
+        ${memBanks.entries.length === 0
+          ? '<div class="emp">No entries in memory banks. Use <code>recall add</code> to log your first entry.</div>'
+          : memBanks.entries.slice(-20).reverse().map((e, i) => {
+              const realIdx = memBanks.entries.length - 1 - i;
+              const tags = (e.tags || []).map(t => `<span class="tg tg-c">${esc(t)}</span>`).join('');
+              const date = e.timestamp ? e.timestamp.slice(0,10) : '';
+              return `<div class="r" onclick="open_('mb:${realIdx}')" data-k="mb:${realIdx}">
+                <span class="r-id" style="font-size:0.72rem;color:var(--dim)">${esc(e.id.slice(0,8))}</span>
+                <span class="r-tg">${tags}${e.source && e.source !== 'manual' ? `<span class="tg tg-t">${esc(e.source)}</span>` : ''}</span>
+                <span class="r-d">${esc(e.content.slice(0,100))}${e.content.length > 100 ? '…' : ''}</span>
+              </div>`;
+            }).join('')
+        }
       </div>
 
       <div class="sec" id="s-viz">
