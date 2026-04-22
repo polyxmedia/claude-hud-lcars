@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.0 - 2026-04-22
+
+- MNEMOS panel — new sidebar section that auto-detects [Mnemos](https://github.com/polyxmedia/mnemos) (persistent memory + skills for AI coding agents) and surfaces every observation, session, auto-promoted skill, file touch, top tag, and top project from `~/.mnemos/mnemos.db`. Reads SQLite directly via the system `sqlite3` CLI — zero new npm dependencies
+- Sub-tabs for OBSERVATIONS / SESSIONS / SKILLS / FILES with full-text filter that searches title, content, tags, and project across the active tab
+- Type-filter chips on observations (CORRECTION, CONVENTION, DECISION, BUGFIX, PATTERN, etc.) colour-coded by obs_type
+- Detail panels render the full observation body with structured `tried` / `wrong_because` / `fix` for corrections, importance, access count, supersession status, expiry, session ID, and tag chips
+- Action buttons: COPY ID, COPY CONTENT, OPEN IN CLI (runs `mnemos search`), REPLAY (runs `mnemos replay <session>`), EXPORT PACK (runs `mnemos skill export <name>`)
+- Universal search (Cmd+K) picks up mnemos entries with their own pink MNEMOS type badge
+- Cross-platform `sqlite3` lookup — checks `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/opt/local/bin`, the standard Windows install path, then falls back to `which`/`where`
+- When mnemos is not installed, the panel renders a hands-off install pitch — learning-loop benefits cards, copy-able install one-liner, and links to the GitHub repo, quick start, and MCP tools reference. Dashboard never errors regardless of mnemos state
+
 ## 1.2.0 - 2026-04-02
 
 - Discover panel — one-click install suggestions for skills, agents, MCP servers, and hooks you haven't set up yet. Collapsed by default, expandable per section
