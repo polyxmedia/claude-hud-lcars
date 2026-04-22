@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { execFileSync } from 'child_process';
 
 // import.meta.dirname is Node 20.11+; fall back for Node 18
 const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
@@ -495,6 +496,139 @@ function getMemoryBanks() {
   } catch { return { entries: [], stats: { total: 0, today: 0, lastEntry: null } }; }
 }
 
+// ── MNEMOS (persistent memory + skills, https://github.com/polyxmedia/mnemos) ──
+// Reads ~/.mnemos/mnemos.db directly via the system sqlite3 CLI. No npm dep.
+// Returns null if mnemos is not installed (db missing). Tolerant of schema drift.
+function getMnemos() {
+  const dbPath = path.join(os.homedir(), '.mnemos', 'mnemos.db');
+  if (!fs.existsSync(dbPath)) return null;
+
+  // Cross-platform sqlite3 binary detection — macOS, Linux, Homebrew, Windows.
+  function findSqlite() {
+    const candidates = [
+      '/usr/bin/sqlite3',
+      '/usr/local/bin/sqlite3',
+      '/opt/homebrew/bin/sqlite3',
+      '/opt/local/bin/sqlite3',
+      'C:\\Program Files\\sqlite3\\sqlite3.exe',
+    ];
+    for (const c of candidates) { if (fs.existsSync(c)) return c; }
+    try {
+      const which = process.platform === 'win32' ? 'where' : 'which';
+      const found = execFileSync(which, ['sqlite3'], { encoding: 'utf-8', timeout: 1000 }).trim().split(/\r?\n/)[0];
+      if (found && fs.existsSync(found)) return found;
+    } catch {}
+    return null;
+  }
+  const sqlite = findSqlite();
+  if (!sqlite) return { installed: false, reason: 'sqlite3 binary not found on PATH', dbPath };
+
+  function q(sql) {
+    try {
+      const out = execFileSync(sqlite, ['-readonly', '-json', dbPath, sql], {
+        encoding: 'utf-8', timeout: 5000, maxBuffer: 50 * 1024 * 1024,
+      });
+      const trimmed = out.trim();
+      return trimmed ? JSON.parse(trimmed) : [];
+    } catch { return []; }
+  }
+  function parseTags(t) {
+    if (!t) return [];
+    try { const a = JSON.parse(t); return Array.isArray(a) ? a : []; } catch { return []; }
+  }
+
+  let dbSize = 0; try { dbSize = fs.statSync(dbPath).size; } catch {}
+
+  const observations = q(`
+    SELECT id, session_id, agent_id, project, title, content, obs_type, tags,
+           importance, access_count, created_at, valid_until, invalidated_at,
+           expires_at, structured, rationale
+    FROM observations
+    ORDER BY datetime(created_at) DESC
+    LIMIT 500
+  `).map(o => ({ ...o, tags: parseTags(o.tags) }));
+
+  const sessions = q(`
+    SELECT id, agent_id, project, goal, summary, reflection, status,
+           outcome_tags, started_at, ended_at,
+           (SELECT COUNT(*) FROM observations WHERE session_id = sessions.id) AS obs_count
+    FROM sessions
+    ORDER BY datetime(started_at) DESC
+    LIMIT 200
+  `).map(s => ({ ...s, outcome_tags: parseTags(s.outcome_tags) }));
+
+  const skills = q(`
+    SELECT id, agent_id, name, description, procedure, pitfalls, tags,
+           source_sessions, use_count, success_count, effectiveness, version,
+           created_at, updated_at
+    FROM skills
+    ORDER BY name ASC
+  `).map(s => ({
+    ...s,
+    tags: parseTags(s.tags),
+    source_sessions: parseTags(s.source_sessions),
+  }));
+
+  const fileTouches = q(`
+    SELECT path, project,
+           COUNT(*) AS touches,
+           MAX(touched_at) AS last_touched,
+           COUNT(DISTINCT session_id) AS distinct_sessions
+    FROM file_touches
+    GROUP BY path, project
+    ORDER BY touches DESC, datetime(last_touched) DESC
+    LIMIT 100
+  `);
+
+  const links = q(`
+    SELECT source_id, target_id, link_type, created_at FROM observation_links LIMIT 500
+  `);
+
+  // Aggregate stats
+  const byType = {};
+  const byProject = {};
+  const tagCounts = {};
+  let liveCount = 0, supersededCount = 0;
+  const nowMs = Date.now();
+  for (const o of observations) {
+    byType[o.obs_type] = (byType[o.obs_type] || 0) + 1;
+    if (o.project) byProject[o.project] = (byProject[o.project] || 0) + 1;
+    for (const t of o.tags) tagCounts[t] = (tagCounts[t] || 0) + 1;
+    const expired = o.expires_at && Date.parse(o.expires_at) < nowMs;
+    if (o.invalidated_at || expired) supersededCount++; else liveCount++;
+  }
+  const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 20)
+    .map(([tag, count]) => ({ tag, count }));
+  const topProjects = Object.entries(byProject).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([project, count]) => ({ project, count }));
+
+  // Detect mnemos binary + version (best-effort)
+  let binPath = '', binVersion = '';
+  try {
+    binPath = execFileSync('/usr/bin/which', ['mnemos'], { encoding: 'utf-8', timeout: 1000 }).trim();
+  } catch {}
+  if (binPath) {
+    try { binVersion = execFileSync(binPath, ['version'], { encoding: 'utf-8', timeout: 1500 }).trim(); } catch {}
+  }
+
+  return {
+    installed: true,
+    dbPath, dbSize, binPath, binVersion,
+    stats: {
+      observations: observations.length,
+      live: liveCount,
+      superseded: supersededCount,
+      sessions: sessions.length,
+      skills: skills.length,
+      autoPromoted: skills.filter(s => (s.tags || []).includes('auto-promoted')).length,
+      links: links.length,
+      fileTouches: fileTouches.length,
+      byType, topTags, topProjects,
+    },
+    observations, sessions, skills, fileTouches, links,
+  };
+}
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escJ(s) { return JSON.stringify(s).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/`/g,'\\u0060').replace(/\$/g,'\\u0024'); }
 // escJ output safe for placement inside a double-quoted HTML attribute
@@ -510,6 +644,7 @@ function gen() {
   const sessionList = getSessions(), history = getHistory(), claudeMds = getClaudeMdFiles();
   const projectHistory = getProjectHistory();
   const memBanks = getMemoryBanks();
+  const mnemos = getMnemos();
   const ts = new Date().toISOString().replace('T',' ').slice(0,19)+'Z';
   const stardate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
 
@@ -747,6 +882,124 @@ function gen() {
       ]};
   });
 
+  // ── MNEMOS detail entries — every observation, session, skill, and file is openable ──
+  if (mnemos && mnemos.installed) {
+    const mnBin = mnemos.binPath || 'mnemos';
+    const fmtDate = (s) => { if (!s) return '—'; try { return new Date(s).toISOString().replace('T',' ').slice(0,19); } catch { return s; } };
+    const obsTypeLabel = {
+      correction: 'CORRECTION', convention: 'CONVENTION', decision: 'DECISION',
+      bugfix: 'BUGFIX', pattern: 'PATTERN', preference: 'PREFERENCE',
+      context: 'CONTEXT', architecture: 'ARCHITECTURE', episodic: 'EPISODIC',
+      semantic: 'SEMANTIC', procedural: 'PROCEDURAL', dream: 'DREAM',
+    };
+    mnemos.observations.forEach(o => {
+      let structured = null;
+      try { structured = o.structured ? JSON.parse(o.structured) : null; } catch {}
+      const status = o.invalidated_at ? 'SUPERSEDED' : (o.expires_at && Date.parse(o.expires_at) < Date.now()) ? 'EXPIRED' : 'LIVE';
+      const tagsLine = o.tags && o.tags.length ? '**Tags:** ' + o.tags.map(t => '`'+t+'`').join(' ') + '\n\n' : '';
+      const projLine = o.project ? '**Project:** ' + o.project + '\n\n' : '';
+      const ratLine  = o.rationale ? '**Rationale:** ' + o.rationale + '\n\n' : '';
+      let extra = '';
+      if (structured) {
+        if (structured.tried)         extra += '**Tried:** ' + structured.tried + '\n\n';
+        if (structured.wrong_because) extra += '**Wrong because:** ' + structured.wrong_because + '\n\n';
+        if (structured.fix)           extra += '**Fix:** ' + structured.fix + '\n\n';
+        const handled = new Set(['tried','wrong_because','fix']);
+        const otherKeys = Object.keys(structured).filter(k => !handled.has(k));
+        if (otherKeys.length) extra += '**Structured:**\n```json\n' + JSON.stringify(structured, null, 2) + '\n```\n\n';
+      }
+      const body = [
+        projLine + tagsLine + ratLine + extra,
+        '**Content:**\n\n' + (o.content || ''),
+        '\n\n---\n',
+        '**ID:** `' + o.id + '`  \n',
+        '**Type:** ' + o.obs_type + ' · **Importance:** ' + (o.importance ?? '—') + '/10 · **Access count:** ' + (o.access_count ?? 0),
+        '\n\n**Created:** ' + fmtDate(o.created_at) + (o.session_id ? '  \n**Session:** `' + o.session_id + '`' : ''),
+        o.valid_until ? '  \n**Valid until:** ' + fmtDate(o.valid_until) : '',
+        o.invalidated_at ? '  \n**Invalidated:** ' + fmtDate(o.invalidated_at) : '',
+        o.expires_at ? '  \n**Expires:** ' + fmtDate(o.expires_at) : '',
+      ].join('');
+      D['mn:o:' + o.id] = {
+        t: o.title || '(untitled)',
+        tp: 'MNEMOS // ' + (obsTypeLabel[o.obs_type] || o.obs_type.toUpperCase()),
+        m: (o.project || '—') + ' // ' + status + ' // imp ' + (o.importance ?? '?') + '/10 // ' + fmtDate(o.created_at),
+        b: body,
+        actions: [
+          { label: 'COPY ID',     cmd: o.id, icon: 'COPY' },
+          { label: 'COPY CONTENT', cmd: o.content || '', icon: 'COPY' },
+          { label: 'OPEN IN CLI', cmd: mnBin + ' search ' + (o.title || '').split(/\s+/).slice(0,3).join(' '), icon: 'RUN' },
+        ],
+      };
+    });
+
+    mnemos.sessions.forEach(s => {
+      const tagsLine = s.outcome_tags && s.outcome_tags.length ? '**Outcome tags:** ' + s.outcome_tags.map(t => '`'+t+'`').join(' ') + '\n\n' : '';
+      const body = [
+        '**Project:** ' + (s.project || '—') + '\n\n',
+        '**Goal:** ' + (s.goal || '—') + '\n\n',
+        '**Status:** ' + (s.status || '—') + '\n\n',
+        tagsLine,
+        '**Started:** ' + fmtDate(s.started_at) + '  \n',
+        '**Ended:** ' + fmtDate(s.ended_at) + '\n\n',
+        '**Observations recorded:** ' + (s.obs_count ?? 0) + '\n\n',
+        s.summary ? '**Summary:**\n\n' + s.summary + '\n\n' : '',
+        s.reflection ? '**Reflection:**\n\n' + s.reflection + '\n\n' : '',
+        '---\n\n**Session ID:** `' + s.id + '`',
+      ].join('');
+      D['mn:s:' + s.id] = {
+        t: s.goal ? s.goal.slice(0, 70) : (s.project || s.id.slice(0,12)),
+        tp: 'MNEMOS // SESSION',
+        m: (s.project || '—') + ' // ' + (s.status || 'ok').toUpperCase() + ' // ' + (s.obs_count ?? 0) + ' obs // ' + fmtDate(s.started_at),
+        b: body,
+        actions: [
+          { label: 'COPY ID',  cmd: s.id, icon: 'COPY' },
+          { label: 'REPLAY',   cmd: mnBin + ' replay ' + s.id, icon: 'RUN' },
+        ],
+      };
+    });
+
+    mnemos.skills.forEach(sk => {
+      const promoted = (sk.tags || []).includes('auto-promoted');
+      const eff = (sk.effectiveness || 0);
+      const sources = sk.source_sessions && sk.source_sessions.length
+        ? '\n\n**Source sessions:** ' + sk.source_sessions.map(id => '`'+id.slice(0,12)+'`').join(' ')
+        : '';
+      const tagsLine = sk.tags && sk.tags.length ? '**Tags:** ' + sk.tags.map(t => '`'+t+'`').join(' ') + '\n\n' : '';
+      const body = [
+        tagsLine,
+        '**Description:** ' + (sk.description || '—') + '\n\n',
+        '**Use count:** ' + (sk.use_count ?? 0) + ' · **Success:** ' + (sk.success_count ?? 0) + ' · **Effectiveness:** ' + (eff * 100).toFixed(0) + '%\n\n',
+        '**Version:** v' + (sk.version || 1) + ' · **Updated:** ' + fmtDate(sk.updated_at) + '\n\n',
+        '---\n\n## Procedure\n\n' + (sk.procedure || '—'),
+        sk.pitfalls ? '\n\n## Pitfalls\n\n' + sk.pitfalls : '',
+        sources,
+      ].join('');
+      D['mn:sk:' + sk.name] = {
+        t: sk.name,
+        tp: 'MNEMOS // SKILL' + (promoted ? ' // AUTO-PROMOTED' : ''),
+        m: 'v' + (sk.version || 1) + ' // ' + (sk.use_count ?? 0) + ' uses // ' + (eff * 100).toFixed(0) + '% eff',
+        b: body,
+        actions: [
+          { label: 'EXPORT PACK', cmd: mnBin + ' skill export ' + sk.name, icon: 'COPY' },
+          { label: 'COPY NAME',   cmd: sk.name, icon: 'COPY' },
+        ],
+      };
+    });
+
+    mnemos.fileTouches.forEach((f, i) => {
+      D['mn:f:' + i] = {
+        t: f.path.split('/').slice(-2).join('/'),
+        tp: 'MNEMOS // FILE TOUCH',
+        m: (f.project || '—') + ' // ' + f.touches + ' touch' + (f.touches !== 1 ? 'es' : '') + ' // last ' + fmtDate(f.last_touched),
+        b: '**Path:** `' + f.path + '`\n\n**Project:** ' + (f.project || '—') + '\n\n**Touches:** ' + f.touches + '  \n**Distinct sessions:** ' + (f.distinct_sessions || 0) + '  \n**Last touched:** ' + fmtDate(f.last_touched),
+        actions: [
+          { label: 'OPEN FILE', cmd: 'open ' + f.path, icon: 'EDIT' },
+          { label: 'COPY PATH', cmd: f.path, icon: 'PATH' },
+        ],
+      };
+    });
+  }
+
   const sections = [
     { id: 'skills',   label: 'SKILLS',       color: '#9999FF', count: skills.length },
     { id: 'mcp',      label: 'MCP SERVERS',  color: '#FF9933', count: mcp.length },
@@ -758,6 +1011,7 @@ function gen() {
     { id: 'sessions', label: 'SESSIONS',     color: '#FFCC66', count: projectHistory.length },
     { id: 'claudemd', label: 'CLAUDE.MD',    color: '#FF9933', count: claudeMds.length },
     { id: 'membanks', label: 'MEMORY BANKS', color: '#CC6699', count: memBanks.stats.total },
+    { id: 'mnemos',   label: 'MNEMOS',       color: '#FF66CC', count: mnemos ? mnemos.stats.observations : null },
     { id: 'market',   label: 'MARKET',       color: '#FF9966', count: marketItems.length },
     { id: 'viz',      label: 'TACTICAL',     color: '#9999FF', count: null },
     { id: 'q',        label: 'Q',            color: '#CC6666', count: null },
@@ -2261,6 +2515,170 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
               </div>`;
             }).join('')
         }
+      </div>
+
+      <div class="sec" id="s-mnemos">
+        ${(!mnemos || mnemos.installed === false) ? (() => {
+          const sqliteMissing = mnemos && mnemos.installed === false;
+          const installCmd = 'curl -fsSL https://raw.githubusercontent.com/polyxmedia/mnemos/main/scripts/install.sh | bash';
+          return `
+          <div class="sec-h"><span>Mnemos // Persistent Memory + Skills</span><span style="font-size:0.7rem;color:var(--dim);font-family:JetBrains Mono,monospace">NOT DETECTED</span></div>
+          <div style="padding:28px 24px">
+            <div style="font-family:Antonio,sans-serif;font-size:1.4rem;color:var(--pink, #FF66CC);letter-spacing:0.08em;margin-bottom:6px">MNEMOS NOT ${sqliteMissing ? 'AVAILABLE' : 'INSTALLED'}</div>
+            <div style="font-size:0.82rem;line-height:1.6;color:var(--text);max-width:640px;margin-bottom:20px">
+              ${sqliteMissing
+                ? 'Mnemos is installed but the system <code>sqlite3</code> CLI was not found on PATH. Install it (<code>brew install sqlite</code> on macOS) and reload.'
+                : 'Mnemos is a learning loop for AI coding agents. Corrections compound into skills; replay surfaces what you have learned since. The memory layer never calls an LLM — synthesis is deterministic pattern-mining, so it is reproducible, token-free, and auditable.'}
+            </div>
+            ${sqliteMissing ? '' : `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;max-width:760px">
+              <div style="border:1px solid #1a1a1e;border-left:3px solid var(--red);padding:12px 14px;background:#08080a">
+                <div style="font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.1em;color:var(--red);margin-bottom:4px">CORRECTION JOURNAL</div>
+                <div style="font-size:0.78rem;line-height:1.5;color:var(--text)">tried / wrong_because / fix as a first-class type. Past mistakes surface before you make them again.</div>
+              </div>
+              <div style="border:1px solid #1a1a1e;border-left:3px solid var(--purple);padding:12px 14px;background:#08080a">
+                <div style="font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.1em;color:var(--purple);margin-bottom:4px">CORRECTIONS → SKILLS</div>
+                <div style="font-size:0.78rem;line-height:1.5;color:var(--text)">Three related corrections promote into a skill — deterministic, no LLM, no drift.</div>
+              </div>
+              <div style="border:1px solid #1a1a1e;border-left:3px solid var(--gold);padding:12px 14px;background:#08080a">
+                <div style="font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.1em;color:var(--gold);margin-bottom:4px">RETROSPECTIVE REPLAY</div>
+                <div style="font-size:0.78rem;line-height:1.5;color:var(--text)">Regenerate any past session as markdown with everything you have learned since layered in.</div>
+              </div>
+              <div style="border:1px solid #1a1a1e;border-left:3px solid var(--cyan);padding:12px 14px;background:#08080a">
+                <div style="font-family:Antonio,sans-serif;font-size:0.75rem;letter-spacing:0.1em;color:var(--cyan);margin-bottom:4px">SINGLE GO BINARY</div>
+                <div style="font-size:0.78rem;line-height:1.5;color:var(--text)">15 MB static binary. No Python, no Docker, no vector DB. macOS / Linux / Windows · amd64 + arm64.</div>
+              </div>
+            </div>
+            <div style="font-family:Antonio,sans-serif;font-size:0.78rem;letter-spacing:0.1em;color:var(--dim);margin-bottom:8px">INSTALL</div>
+            <div style="position:relative;background:#0a0a0c;border:1px solid #1a1a1e;border-radius:6px;padding:12px 80px 12px 14px;font-family:JetBrains Mono,monospace;font-size:0.78rem;color:var(--orange);overflow-x:auto;max-width:760px;margin-bottom:8px">
+              <span id="mn-install-cmd">${esc(installCmd)}</span>
+              <button onclick="navigator.clipboard.writeText(document.getElementById('mn-install-cmd').textContent);toast('Copied install command');beepClick&&beepClick()" style="position:absolute;right:8px;top:8px;background:var(--orange);color:#000;border:none;font-family:Antonio,sans-serif;font-size:0.7rem;font-weight:600;letter-spacing:0.1em;padding:4px 10px;border-radius:8px;cursor:pointer">COPY</button>
+            </div>
+            <div style="font-size:0.78rem;color:var(--dim);margin-bottom:8px">Then run <code style="background:#0a0a0c;padding:2px 6px;border-radius:3px;color:var(--orange)">mnemos init</code> and restart your agent. The MNEMOS panel will populate automatically on next dashboard reload.</div>
+            `}
+            <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+              <a href="https://github.com/polyxmedia/mnemos" target="_blank" style="color:var(--blue);text-decoration:none;font-size:0.82rem;font-family:Antonio,sans-serif;letter-spacing:0.06em">GITHUB →</a>
+              <a href="https://github.com/polyxmedia/mnemos#quick-start" target="_blank" style="color:var(--blue);text-decoration:none;font-size:0.82rem;font-family:Antonio,sans-serif;letter-spacing:0.06em">QUICK START →</a>
+              <a href="https://github.com/polyxmedia/mnemos/blob/main/docs/MCP_TOOLS.md" target="_blank" style="color:var(--blue);text-decoration:none;font-size:0.82rem;font-family:Antonio,sans-serif;letter-spacing:0.06em">MCP TOOLS REFERENCE →</a>
+            </div>
+          </div>
+          `;
+        })() : (() => {
+          const m = mnemos;
+          const fmtBytes = (n) => n < 1024 ? n + ' B' : n < 1024*1024 ? (n/1024).toFixed(1)+' KB' : (n/1024/1024).toFixed(1)+' MB';
+          const fmtDate = (s) => { if (!s) return '—'; try { return new Date(s).toISOString().replace('T',' ').slice(0,19); } catch { return s; } };
+          const obsTypeColor = {
+            correction: 'var(--red)', convention: 'var(--blue)', decision: 'var(--gold)',
+            bugfix: 'var(--orange)', pattern: 'var(--purple)', preference: 'var(--cyan)',
+            context: 'var(--dim)', architecture: 'var(--green)', episodic: 'var(--text)',
+            semantic: 'var(--text)', procedural: 'var(--text)', dream: 'var(--purple)',
+          };
+          // Group observations by type (for chip filters and quick counts)
+          const byType = m.stats.byType;
+          const typeKeys = Object.keys(byType).sort((a, b) => byType[b] - byType[a]);
+          // Render a single observation row
+          const obsRow = (o) => {
+            const status = o.invalidated_at ? 'SUPERSEDED' : (o.expires_at && Date.parse(o.expires_at) < Date.now()) ? 'EXPIRED' : 'LIVE';
+            const statusClass = status === 'LIVE' ? 'tg-g' : 'tg-r';
+            const tagChips = (o.tags || []).slice(0, 3).map(t => '<span class="tg tg-c">' + esc(t) + '</span>').join('');
+            const projChip = o.project ? '<span class="tg tg-b">' + esc(o.project) + '</span>' : '';
+            const typeColor = obsTypeColor[o.obs_type] || 'var(--text)';
+            const dateShort = (o.created_at || '').replace('T', ' ').slice(0, 16);
+            return '<div class="r" data-mn-type="' + esc(o.obs_type) + '" data-mn-search="' + esc(((o.title||'') + ' ' + (o.content||'') + ' ' + (o.tags||[]).join(' ') + ' ' + (o.project||'')).toLowerCase()) + '" onclick="open_(\'mn:o:' + esc(o.id) + '\')" style="border-left:3px solid ' + typeColor + '">'
+              + '<span class="r-n" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.title || '(untitled)') + '</span>'
+              + '<span class="r-tg"><span class="tg" style="background:' + typeColor + ';color:#000;font-weight:600">' + esc(o.obs_type) + '</span>' + projChip + tagChips + '<span class="tg ' + statusClass + '">' + status + '</span></span>'
+              + '<span class="r-d" style="font-size:0.7rem;color:var(--dim)">' + esc(dateShort) + '</span>'
+              + '</div>';
+          };
+          const sesRow = (s) => {
+            const statusClass = s.status === 'failed' ? 'tg-r' : s.status === 'blocked' ? 'tg-o' : 'tg-g';
+            const dateShort = (s.started_at || '').replace('T', ' ').slice(0, 16);
+            const projChip = s.project ? '<span class="tg tg-b">' + esc(s.project) + '</span>' : '';
+            return '<div class="r" data-mn-search="' + esc(((s.goal||'') + ' ' + (s.project||'') + ' ' + (s.summary||'')).toLowerCase()) + '" onclick="open_(\'mn:s:' + esc(s.id) + '\')" style="border-left:3px solid var(--gold)">'
+              + '<span class="r-n" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(s.goal || '(' + s.id.slice(0,12) + ')') + '</span>'
+              + '<span class="r-tg">' + projChip + '<span class="tg ' + statusClass + '">' + esc((s.status || 'ok').toUpperCase()) + '</span><span class="tg tg-c">' + (s.obs_count || 0) + ' obs</span></span>'
+              + '<span class="r-d" style="font-size:0.7rem;color:var(--dim)">' + esc(dateShort) + '</span>'
+              + '</div>';
+          };
+          const skRow = (sk) => {
+            const promoted = (sk.tags || []).includes('auto-promoted');
+            const eff = (sk.effectiveness || 0);
+            return '<div class="r" data-mn-search="' + esc(((sk.name||'') + ' ' + (sk.description||'') + ' ' + (sk.procedure||'') + ' ' + (sk.tags||[]).join(' ')).toLowerCase()) + '" onclick="open_(\'mn:sk:' + esc(sk.name) + '\')" style="border-left:3px solid var(--purple)">'
+              + '<span class="r-n" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(sk.name) + '</span>'
+              + '<span class="r-tg"><span class="tg tg-b">v' + (sk.version || 1) + '</span>' + (promoted ? '<span class="tg tg-o">AUTO</span>' : '') + '<span class="tg tg-c">' + (sk.use_count || 0) + ' uses</span><span class="tg tg-g">' + (eff * 100).toFixed(0) + '%</span></span>'
+              + '<span class="r-d" style="font-size:0.7rem;color:var(--dim);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(sk.description || '') + '</span>'
+              + '</div>';
+          };
+          const flRow = (f, i) => {
+            return '<div class="r" data-mn-search="' + esc(((f.path||'') + ' ' + (f.project||'')).toLowerCase()) + '" onclick="open_(\'mn:f:' + i + '\')" style="border-left:3px solid var(--cyan)">'
+              + '<span class="r-n" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:JetBrains Mono,monospace;font-size:0.78rem">' + esc(f.path) + '</span>'
+              + '<span class="r-tg">' + (f.project ? '<span class="tg tg-b">' + esc(f.project) + '</span>' : '') + '<span class="tg tg-o">' + f.touches + 'x</span><span class="tg tg-c">' + (f.distinct_sessions || 0) + ' sess</span></span>'
+              + '<span class="r-d" style="font-size:0.7rem;color:var(--dim)">' + esc((f.last_touched || '').replace('T',' ').slice(0,16)) + '</span>'
+              + '</div>';
+          };
+          // Type filter chips
+          const typeChips = '<div id="mn-type-chips" style="display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px">'
+            + '<button class="mn-chip act" data-mn-chip="" onclick="mnFilterChip(this,\'\')" style="background:var(--blue);color:#000;border:none;font-family:Antonio,sans-serif;font-size:0.7rem;font-weight:600;letter-spacing:0.08em;padding:4px 10px;border-radius:10px;cursor:pointer">ALL // ' + m.observations.length + '</button>'
+            + typeKeys.map(k => {
+                const col = obsTypeColor[k] || 'var(--text)';
+                return '<button class="mn-chip" data-mn-chip="' + esc(k) + '" onclick="mnFilterChip(this,\'' + esc(k) + '\')" style="background:transparent;color:' + col + ';border:1px solid ' + col + ';font-family:Antonio,sans-serif;font-size:0.7rem;font-weight:600;letter-spacing:0.08em;padding:4px 10px;border-radius:10px;cursor:pointer">' + esc(k.toUpperCase()) + ' // ' + byType[k] + '</button>';
+              }).join('')
+            + '</div>';
+          // Top tags / projects sidebar info
+          const topTagsHtml = m.stats.topTags.length
+            ? '<div style="padding:12px 16px;border-top:1px solid #1a1a1e"><div style="font-family:Antonio,sans-serif;font-size:0.72rem;letter-spacing:0.1em;color:var(--dim);margin-bottom:8px">TOP TAGS</div><div style="display:flex;flex-wrap:wrap;gap:6px">'
+              + m.stats.topTags.slice(0, 16).map(t => '<button onclick="mnSearchSet(\'' + esc(t.tag) + '\')" style="background:rgba(102,204,204,0.08);border:1px solid rgba(102,204,204,0.3);color:var(--cyan);font-family:JetBrains Mono,monospace;font-size:0.72rem;padding:3px 9px;border-radius:10px;cursor:pointer">' + esc(t.tag) + ' <span style="color:var(--dim)">' + t.count + '</span></button>').join('')
+              + '</div></div>'
+            : '';
+          const topProjHtml = m.stats.topProjects.length
+            ? '<div style="padding:12px 16px;border-top:1px solid #1a1a1e"><div style="font-family:Antonio,sans-serif;font-size:0.72rem;letter-spacing:0.1em;color:var(--dim);margin-bottom:8px">TOP PROJECTS</div><div style="display:flex;flex-wrap:wrap;gap:6px">'
+              + m.stats.topProjects.map(p => '<button onclick="mnSearchSet(\'' + esc(p.project) + '\')" style="background:rgba(153,153,255,0.08);border:1px solid rgba(153,153,255,0.3);color:var(--blue);font-family:JetBrains Mono,monospace;font-size:0.72rem;padding:3px 9px;border-radius:10px;cursor:pointer">' + esc(p.project) + ' <span style="color:var(--dim)">' + p.count + '</span></button>').join('')
+              + '</div></div>'
+            : '';
+
+          return `
+          <div class="sec-h" style="display:flex;align-items:center;justify-content:space-between"><span>Mnemos // Persistent Memory + Skills</span><span style="font-size:0.7rem;color:var(--dim);font-family:JetBrains Mono,monospace">${esc(m.binVersion || '')} · ${fmtBytes(m.dbSize)}</span></div>
+          <div class="mcp-overview" style="grid-template-columns:repeat(6,1fr)">
+            <div class="mcp-overview-stat"><div class="mcp-overview-n total">${String(m.stats.observations).padStart(3,'0')}</div><div class="mcp-overview-l">Observations</div></div>
+            <div class="mcp-overview-stat"><div class="mcp-overview-n green">${String(m.stats.live).padStart(3,'0')}</div><div class="mcp-overview-l">Live</div></div>
+            <div class="mcp-overview-stat"><div class="mcp-overview-n" style="color:var(--red)">${String(m.stats.superseded).padStart(3,'0')}</div><div class="mcp-overview-l">Superseded</div></div>
+            <div class="mcp-overview-stat"><div class="mcp-overview-n orange">${String(m.stats.sessions).padStart(3,'0')}</div><div class="mcp-overview-l">Sessions</div></div>
+            <div class="mcp-overview-stat"><div class="mcp-overview-n" style="color:var(--purple)">${String(m.stats.skills).padStart(3,'0')}</div><div class="mcp-overview-l">Skills (${m.stats.autoPromoted} auto)</div></div>
+            <div class="mcp-overview-stat"><div class="mcp-overview-n" style="color:var(--cyan)">${String(m.stats.fileTouches).padStart(3,'0')}</div><div class="mcp-overview-l">Tracked Files</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:12px;border-top:1px solid #1a1a1e;border-bottom:1px solid #1a1a1e;background:#08080a">
+            <button class="mn-tab act" id="mn-tab-obs" onclick="mnSwitchTab('obs')" style="background:var(--blue);border:none;color:#000;font-family:Antonio,sans-serif;font-size:0.78rem;font-weight:600;letter-spacing:0.1em;padding:6px 14px;border-radius:12px;cursor:pointer">OBSERVATIONS // ${m.observations.length}</button>
+            <button class="mn-tab" id="mn-tab-ses" onclick="mnSwitchTab('ses')" style="background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:Antonio,sans-serif;font-size:0.78rem;font-weight:600;letter-spacing:0.1em;padding:6px 14px;border-radius:12px;cursor:pointer">SESSIONS // ${m.sessions.length}</button>
+            <button class="mn-tab" id="mn-tab-sk" onclick="mnSwitchTab('sk')" style="background:transparent;border:1px solid var(--purple);color:var(--purple);font-family:Antonio,sans-serif;font-size:0.78rem;font-weight:600;letter-spacing:0.1em;padding:6px 14px;border-radius:12px;cursor:pointer">SKILLS // ${m.skills.length}</button>
+            <button class="mn-tab" id="mn-tab-fl" onclick="mnSwitchTab('fl')" style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:Antonio,sans-serif;font-size:0.78rem;font-weight:600;letter-spacing:0.1em;padding:6px 14px;border-radius:12px;cursor:pointer">FILES // ${m.fileTouches.length}</button>
+            <div style="flex:1"></div>
+            <input id="mn-search" type="text" placeholder="Filter title, content, tags, project..." oninput="mnApplyFilter()" style="flex:1;max-width:360px;background:#0a0a0c;border:1px solid #1a1a1e;color:var(--text);font-family:JetBrains Mono,monospace;font-size:0.78rem;padding:6px 10px;border-radius:4px;outline:none">
+          </div>
+          <div id="mn-view-obs" class="mn-view" style="display:block">
+            ${typeChips}
+            <div id="mn-list-obs">
+              ${m.observations.length === 0 ? '<div class="emp">No observations yet. Run any agent task that calls mnemos_save.</div>' : m.observations.map(obsRow).join('')}
+            </div>
+          </div>
+          <div id="mn-view-ses" class="mn-view" style="display:none">
+            <div id="mn-list-ses">
+              ${m.sessions.length === 0 ? '<div class="emp">No sessions recorded yet.</div>' : m.sessions.map(sesRow).join('')}
+            </div>
+          </div>
+          <div id="mn-view-sk" class="mn-view" style="display:none">
+            <div id="mn-list-sk">
+              ${m.skills.length === 0 ? '<div class="emp">No skills yet. Record three related corrections and one will be auto-promoted.</div>' : m.skills.map(skRow).join('')}
+            </div>
+          </div>
+          <div id="mn-view-fl" class="mn-view" style="display:none">
+            <div id="mn-list-fl">
+              ${m.fileTouches.length === 0 ? '<div class="emp">No file touches recorded.</div>' : m.fileTouches.map((f, i) => flRow(f, i)).join('')}
+            </div>
+          </div>
+          ${topTagsHtml}
+          ${topProjHtml}
+          `;
+        })()}
       </div>
 
       <div class="sec" id="s-viz">
@@ -5369,8 +5787,8 @@ function onSearch() {
   var countEl = document.getElementById('search-count');
   if (!q || q.length < 2) { results.innerHTML = ''; countEl.textContent = ''; return; }
 
-  var typeColors = { 'SKILL': '#9999FF', 'AGENT': '#FFCC99', 'MCP': '#FF9900', 'HOOK': '#CC9966', 'PLUGIN': '#CC99CC', 'ENV': '#66CCCC', 'MEMORY': '#9999CC', 'SESSION': '#88AACC', 'CLAUDE.MD': '#EE8844' };
-  var sectionMap = { 'SKILL': 'skills', 'AGENT': 'agents', 'MCP': 'mcp', 'HOOK': 'hooks', 'PLUGIN': 'plugins', 'ENV': 'env', 'MEMORY': 'memory', 'SESSION': 'sessions', 'CLAUDE.MD': 'claudemd' };
+  var typeColors = { 'SKILL': '#9999FF', 'AGENT': '#FFCC99', 'MCP': '#FF9900', 'HOOK': '#CC9966', 'PLUGIN': '#CC99CC', 'ENV': '#66CCCC', 'MEMORY': '#9999CC', 'SESSION': '#88AACC', 'CLAUDE.MD': '#EE8844', 'MNEMOS': '#FF66CC' };
+  var sectionMap = { 'SKILL': 'skills', 'AGENT': 'agents', 'MCP': 'mcp', 'HOOK': 'hooks', 'PLUGIN': 'plugins', 'ENV': 'env', 'MEMORY': 'memory', 'SESSION': 'sessions', 'CLAUDE.MD': 'claudemd', 'MNEMOS': 'mnemos' };
 
   var matches = [];
   Object.keys(D).forEach(function(k) {
@@ -5378,7 +5796,8 @@ function onSearch() {
     var searchable = (d.t + ' ' + d.tp + ' ' + d.m + ' ' + (d.b || '')).toLowerCase();
     if (searchable.indexOf(q) === -1) return;
     var type = d.tp.split(' ')[0].replace('CLAUDE.MD', 'CLAUDE.MD');
-    if (d.tp.indexOf('CLAUDE.MD') !== -1) type = 'CLAUDE.MD';
+    if (d.tp.indexOf('MNEMOS') === 0) type = 'MNEMOS';
+    else if (d.tp.indexOf('CLAUDE.MD') !== -1) type = 'CLAUDE.MD';
     else if (d.tp.indexOf('SESSION') !== -1) type = 'SESSION';
     // Find match context
     var idx = searchable.indexOf(q);
@@ -5446,6 +5865,72 @@ function switchTac(view) {
   document.getElementById('tac-' + view).classList.add('act');
   document.getElementById('tac-tab-' + view).classList.add('act');
   beepNav();
+}
+
+// ═══ MNEMOS PANEL ═══
+var _mnTab = 'obs', _mnTypeFilter = '';
+function mnSwitchTab(tab) {
+  _mnTab = tab;
+  ['obs','ses','sk','fl'].forEach(function(t) {
+    var view = document.getElementById('mn-view-' + t);
+    var btn = document.getElementById('mn-tab-' + t);
+    if (!view || !btn) return;
+    var on = (t === tab);
+    view.style.display = on ? 'block' : 'none';
+    btn.classList.toggle('act', on);
+    var col = { obs: 'var(--blue)', ses: 'var(--gold)', sk: 'var(--purple)', fl: 'var(--cyan)' }[t];
+    if (on) { btn.style.background = col; btn.style.color = '#000'; btn.style.border = 'none'; }
+    else    { btn.style.background = 'transparent'; btn.style.color = col; btn.style.border = '1px solid ' + col; }
+  });
+  mnApplyFilter();
+  beepNav();
+}
+function mnFilterChip(btn, type) {
+  _mnTypeFilter = type;
+  var chips = document.querySelectorAll('#mn-type-chips .mn-chip');
+  for (var i = 0; i < chips.length; i++) {
+    var c = chips[i];
+    var isActive = (c.getAttribute('data-mn-chip') || '') === type;
+    c.classList.toggle('act', isActive);
+    if (isActive) {
+      c.style.background = 'var(--blue)';
+      c.style.color = '#000';
+      c.style.border = 'none';
+    } else {
+      var col = c.style.color;
+      var origCol = c.getAttribute('data-orig-col');
+      if (!origCol) { origCol = col; c.setAttribute('data-orig-col', col); }
+      c.style.background = 'transparent';
+      c.style.color = origCol;
+      c.style.border = '1px solid ' + origCol;
+    }
+  }
+  mnApplyFilter();
+}
+function mnSearchSet(text) {
+  var input = document.getElementById('mn-search');
+  if (!input) return;
+  input.value = text;
+  mnApplyFilter();
+}
+function mnApplyFilter() {
+  var input = document.getElementById('mn-search');
+  var q = input ? input.value.trim().toLowerCase() : '';
+  var listIds = { obs: 'mn-list-obs', ses: 'mn-list-ses', sk: 'mn-list-sk', fl: 'mn-list-fl' };
+  var listEl = document.getElementById(listIds[_mnTab]);
+  if (!listEl) return;
+  var rows = listEl.querySelectorAll('.r');
+  var visible = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var hay = r.getAttribute('data-mn-search') || '';
+    var rType = r.getAttribute('data-mn-type') || '';
+    var matchesText = !q || hay.indexOf(q) !== -1;
+    var matchesType = (_mnTab !== 'obs') || !_mnTypeFilter || rType === _mnTypeFilter;
+    var show = matchesText && matchesType;
+    r.style.display = show ? '' : 'none';
+    if (show) visible++;
+  }
 }
 
 function buildLegend() {
