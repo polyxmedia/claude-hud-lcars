@@ -17,6 +17,11 @@ function rimraf(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function generateDashboardHtml(root) {
+  execSync('node src/generate.js --no-open', { cwd: root, stdio: 'pipe' });
+  return fs.readFileSync(path.join(root, 'dashboard.html'), 'utf-8');
+}
+
 // ── inlined functions under test (sourced from generate.js) ──────────────────
 
 function getSkills(claudeDir) {
@@ -1344,7 +1349,7 @@ describe('hlJson', () => {
 describe('generated dashboard', () => {
   test('inline JS has no syntax errors', () => {
     const root = path.join(__dirname, '..');
-    const html = execSync('node src/generate.js --no-open 2>/dev/null && cat dashboard.html', { cwd: root }).toString();
+    const html = generateDashboardHtml(root);
     const start = html.indexOf('<script>') + 8;
     const end = html.lastIndexOf('</script>');
     assert.ok(start > 8, 'should find <script> tag');
@@ -1359,5 +1364,22 @@ describe('generated dashboard', () => {
     } finally {
       fs.rmSync(tmp, { force: true });
     }
+  });
+
+  test('static dashboard does not check npm registry on load', () => {
+    const root = path.join(__dirname, '..');
+    const html = generateDashboardHtml(root);
+    assert.ok(!html.includes('https://registry.npmjs.org/claude-hud-lcars/latest'));
+    assert.ok(html.includes("latest = 'not checked'"));
+  });
+
+  test('--help prints usage without generating or opening dashboard', () => {
+    const root = path.join(__dirname, '..');
+    const dashboardPath = path.join(root, 'dashboard.html');
+    const before = fs.existsSync(dashboardPath) ? fs.statSync(dashboardPath).mtimeMs : null;
+    const output = execSync('node src/generate.js --help', { cwd: root, encoding: 'utf-8' });
+    assert.ok(output.includes('Usage: claude-hud-lcars'));
+    assert.ok(!output.includes('Dashboard generated'));
+    if (before !== null) assert.equal(fs.statSync(dashboardPath).mtimeMs, before);
   });
 });

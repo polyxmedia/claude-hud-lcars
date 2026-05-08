@@ -95,6 +95,46 @@ if (process.env.CLAUDE_HUD_RESTART_DELAY) {
 let PKG_VERSION = 'unknown';
 try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version; } catch {}
 
+function compareVersions(a, b) {
+  function parseVersion(v) {
+    const [main, pre = ''] = String(v || '').split('-', 2);
+    return {
+      nums: main.split('.').map(n => parseInt(n, 10) || 0),
+      pre: pre ? pre.split('.').map(p => /^\d+$/.test(p) ? Number(p) : p) : [],
+    };
+  }
+  function comparePreId(x, y) {
+    if (x === y) return 0;
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = typeof x === 'number', yn = typeof y === 'number';
+    if (xn && yn) return x > y ? 1 : -1;
+    if (xn) return -1;
+    if (yn) return 1;
+    return String(x) > String(y) ? 1 : -1;
+  }
+
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  const len = Math.max(pa.nums.length, pb.nums.length);
+  for (let i = 0; i < len; i++) {
+    if ((pa.nums[i] || 0) > (pb.nums[i] || 0)) return 1;
+    if ((pa.nums[i] || 0) < (pb.nums[i] || 0)) return -1;
+  }
+  if (pa.pre.length === 0 && pb.pre.length > 0) return 1;
+  if (pa.pre.length > 0 && pb.pre.length === 0) return -1;
+  const preLen = Math.max(pa.pre.length, pb.pre.length);
+  for (let i = 0; i < preLen; i++) {
+    const c = comparePreId(pa.pre[i], pb.pre[i]);
+    if (c !== 0) return c;
+  }
+  return 0;
+}
+
+function isNewerVersion(latest, current) {
+  return compareVersions(latest, current) > 0;
+}
+
 // Import the dashboard generator
 const dashboardPath = path.join(__dirname, '..', 'dashboard.html');
 
@@ -119,6 +159,16 @@ function sseBroadcast(payload) {
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const HUD_EVENTS_PATH = path.join(CLAUDE_DIR, 'hud-events.jsonl');
 let hudEventsOffset = 0; // byte offset — track the tail of hud-events.jsonl
+
+function resolveClaudePath(filePath) {
+  if (typeof filePath !== 'string' || !filePath) throw new Error('path is required');
+  return path.resolve(filePath.replace(/^~(?=$|[\\/])/, os.homedir()));
+}
+
+function isInClaudeDir(resolvedPath) {
+  const rel = path.relative(CLAUDE_DIR, resolvedPath);
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
 
 function initFileWatcher() {
   if (!fs.existsSync(CLAUDE_DIR)) return;
@@ -287,7 +337,7 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
       const data = await npmRes.json();
       const latest = data.version || PKG_VERSION;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ current: PKG_VERSION, latest, hasUpdate: latest !== PKG_VERSION }));
+      res.end(JSON.stringify({ current: PKG_VERSION, latest, hasUpdate: isNewerVersion(latest, PKG_VERSION) }));
     } catch {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ current: PKG_VERSION, latest: null, hasUpdate: false }));
@@ -523,9 +573,8 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     req.on('end', () => {
       try {
         const { path: filePath } = JSON.parse(body);
-        const claudeDir = path.join(os.homedir(), '.claude');
-        const resolved = path.resolve(filePath.replace(/^~/, os.homedir()));
-        if (!resolved.startsWith(claudeDir)) {
+        const resolved = resolveClaudePath(filePath);
+        if (!isInClaudeDir(resolved)) {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Path outside ~/.claude/ is not allowed' }));
           return;
@@ -553,9 +602,8 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
       try {
         const { path: filePath } = JSON.parse(body);
         // Security: only allow opening files under ~/.claude/
-        const claudeDir = path.join(os.homedir(), '.claude');
-        const resolved = path.resolve(filePath);
-        if (!resolved.startsWith(claudeDir)) {
+        const resolved = resolveClaudePath(filePath);
+        if (!isInClaudeDir(resolved)) {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Can only open files under ~/.claude/' }));
           return;
@@ -581,9 +629,8 @@ self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
     req.on('end', async () => {
       try {
         const { path: filePath, content, mkdir: mkdirFlag } = JSON.parse(body);
-        const claudeDir = path.join(os.homedir(), '.claude');
-        const resolved = path.resolve(filePath);
-        if (!resolved.startsWith(claudeDir)) {
+        const resolved = resolveClaudePath(filePath);
+        if (!isInClaudeDir(resolved)) {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Can only save files under ~/.claude/' }));
           return;

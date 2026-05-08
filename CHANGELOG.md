@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.1 - 2026-05-08
+
+- Security: `~/.claude/` path containment hardening — replaced naive `startsWith(claudeDir)` with `path.relative` checks so sibling directories like `~/.claude-backup/` can no longer slip past the file-read/open/save guards
+- Fix: live update check no longer reports "update available" when the local version is ahead of npm — replaced `latest !== current` with a real semver comparator (`isNewerVersion`) that correctly orders prereleases
+- Fix: `--help` flag now actually prints — was previously placed after the generate-and-exit path, making it unreachable
+- Fix: static dashboard no longer hits the npm registry on load. Live server keeps fetching `/api/version` for accurate update info
+- UI: sidebar nav buttons no longer clip when many sections are present (`min-height:54px`, `flex-shrink:0`, scrollable nav container)
+- UI: stats bar row height bumped from 26px to 56px so the section labels under each count are no longer clipped
+- Tests: 35 new assertions covering version comparison, path containment edge cases, network-quiet static dashboard, and `--help` behavior
+
 ## 1.7.0 - 2026-04-22
 
 - MNEMOS panel — new sidebar section that auto-detects [Mnemos](https://github.com/polyxmedia/mnemos) (persistent memory + skills for AI coding agents) and surfaces every observation, session, auto-promoted skill, file touch, top tag, and top project from `~/.mnemos/mnemos.db`. Reads SQLite directly via the system `sqlite3` CLI — zero new npm dependencies

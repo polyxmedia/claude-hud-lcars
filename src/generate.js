@@ -1115,7 +1115,7 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 *{scrollbar-width:thin;scrollbar-color:var(--orange) #050506}
 
 /* ═══ LCARS LAYOUT ═══ */
-.lcars{display:grid;grid-template-columns:240px 1fr;grid-template-rows:72px 48px 26px 1fr 40px;height:calc(100vh - 8px);column-gap:6px;row-gap:0;padding:0}
+.lcars{display:grid;grid-template-columns:240px 1fr;grid-template-rows:72px 48px 56px 1fr 40px;height:calc(100vh - 8px);column-gap:6px;row-gap:0;padding:0}
 
 /* ═══ SIDEBAR ═══ */
 .sb{grid-row:1/-1;grid-column:1;display:flex;flex-direction:column;gap:6px}
@@ -1128,12 +1128,12 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .sb-top h1{font-family:'Antonio',sans-serif;font-size:2rem;font-weight:700;color:var(--bg);line-height:1;text-transform:uppercase;letter-spacing:0.02em}
 .sb-top small{font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:rgba(0,0,0,0.45);display:block;margin-top:4px;letter-spacing:0.1em}
 
-.sb-nav{display:flex;flex-direction:column;gap:4px;flex:1}
+.sb-nav{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow-y:auto}
 
 .nb{
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;height:42px;border:none;cursor:pointer;
-  font-family:'Antonio',sans-serif;font-size:1.05rem;font-weight:500;
+  padding:8px 20px;min-height:54px;flex-shrink:0;border:none;cursor:pointer;
+  font-family:'Antonio',sans-serif;font-size:1.05rem;font-weight:500;line-height:1.1;
   letter-spacing:0.06em;text-transform:uppercase;color:var(--bg);
   border-radius:0 24px 24px 0;transition:filter 0.12s,transform 0.12s;
   text-align:left;
@@ -7499,7 +7499,7 @@ function showActionConfirm(actions) {
   document.body.appendChild(modal);
 }
 
-// ── Update check ─────────────────────────────────────────────────────────────
+// ── Update check (live mode only; static dashboard stays network-quiet) ──────
 window.HUD_VERSION = '${PKG_VERSION}';
 function copyUpdateCmd() {
   try { navigator.clipboard.writeText('npx claude-hud-lcars@latest'); } catch {}
@@ -7515,10 +7515,8 @@ function copyUpdateCmd() {
       var vd = await vr.json();
       current = vd.current; latest = vd.latest; hasUpdate = vd.hasUpdate;
     } else {
-      var nr = await fetch('https://registry.npmjs.org/claude-hud-lcars/latest');
-      var nd = await nr.json();
-      latest = nd.version || current;
-      hasUpdate = latest && latest !== current;
+      latest = 'not checked';
+      hasUpdate = false;
     }
     var cfgVer = document.getElementById('cfg-version-display');
     if (cfgVer) { cfgVer.textContent = 'v' + current + (hasUpdate ? '  (update available)' : ''); if (hasUpdate) cfgVer.style.color = '#FF9900'; }
@@ -7573,6 +7571,27 @@ function copyUpdateCmd() {
 
 const args = process.argv.slice(2);
 
+function printHelp() {
+  console.log('');
+  console.log('  Usage: claude-hud-lcars [options]');
+  console.log('');
+  console.log('  Options:');
+  console.log('    --serve, -s    Start live server with chat, voice, and file editing');
+  console.log('    --no-open      Generate dashboard without opening in browser');
+  console.log('    --help, -h     Show this help');
+  console.log('');
+  console.log('  Environment:');
+  console.log('    CLAUDE_DASHBOARD_API_KEY    Required for chat (live mode)');
+  console.log('    ELEVENLABS_API_KEY   Optional premium voice');
+  console.log('    PORT                 Server port (default: 3200)');
+  console.log('');
+}
+
+if (args.includes('--help') || args.includes('-h')) {
+  printHelp();
+  process.exit(0);
+}
+
 if (args.includes('--serve') || args.includes('-s')) {
   // Live server mode
   import('./server.js');
@@ -7590,21 +7609,5 @@ if (args.includes('--serve') || args.includes('-s')) {
     const { exec } = await import('child_process');
     const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
     exec(cmd + ' ' + JSON.stringify(OUTPUT));
-  }
-
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log('');
-    console.log('  Usage: claude-hud-lcars [options]');
-    console.log('');
-    console.log('  Options:');
-    console.log('    --serve, -s    Start live server with chat, voice, and file editing');
-    console.log('    --no-open      Generate dashboard without opening in browser');
-    console.log('    --help, -h     Show this help');
-    console.log('');
-    console.log('  Environment:');
-    console.log('    CLAUDE_DASHBOARD_API_KEY    Required for chat (live mode)');
-    console.log('    ELEVENLABS_API_KEY   Optional premium voice');
-    console.log('    PORT                 Server port (default: 3200)');
-    console.log('');
   }
 }

@@ -74,6 +74,58 @@ function isCrossOrigin(method, origin, port) {
   return origin !== `http://localhost:${port}` && origin !== `http://127.0.0.1:${port}`;
 }
 
+// Version comparison logic (inlined from server.js)
+function compareVersions(a, b) {
+  function parseVersion(v) {
+    const [main, pre = ''] = String(v || '').split('-', 2);
+    return {
+      nums: main.split('.').map(n => parseInt(n, 10) || 0),
+      pre: pre ? pre.split('.').map(p => /^\d+$/.test(p) ? Number(p) : p) : [],
+    };
+  }
+  function comparePreId(x, y) {
+    if (x === y) return 0;
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = typeof x === 'number', yn = typeof y === 'number';
+    if (xn && yn) return x > y ? 1 : -1;
+    if (xn) return -1;
+    if (yn) return 1;
+    return String(x) > String(y) ? 1 : -1;
+  }
+
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  const len = Math.max(pa.nums.length, pb.nums.length);
+  for (let i = 0; i < len; i++) {
+    if ((pa.nums[i] || 0) > (pb.nums[i] || 0)) return 1;
+    if ((pa.nums[i] || 0) < (pb.nums[i] || 0)) return -1;
+  }
+  if (pa.pre.length === 0 && pb.pre.length > 0) return 1;
+  if (pa.pre.length > 0 && pb.pre.length === 0) return -1;
+  const preLen = Math.max(pa.pre.length, pb.pre.length);
+  for (let i = 0; i < preLen; i++) {
+    const c = comparePreId(pa.pre[i], pb.pre[i]);
+    if (c !== 0) return c;
+  }
+  return 0;
+}
+
+function isNewerVersion(latest, current) {
+  return compareVersions(latest, current) > 0;
+}
+
+// ~/.claude path guard logic (inlined from server.js)
+function resolveClaudePath(filePath, homeDir) {
+  if (typeof filePath !== 'string' || !filePath) throw new Error('path is required');
+  return path.resolve(filePath.replace(/^~(?=$|[\\/])/, homeDir));
+}
+
+function isInBaseDir(baseDir, resolvedPath) {
+  const rel = path.relative(baseDir, resolvedPath);
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 // PWA manifest builder (inlined from server.js /manifest.json route)
 function buildManifest() {
   return {
@@ -293,6 +345,62 @@ describe('CORS cross-origin check', () => {
   test('POST from null origin string is blocked', () => {
     // 'null' string (sent by some browsers for opaque origins) is not the same as JS null
     assert.equal(isCrossOrigin('POST', 'null', 3200), true);
+  });
+});
+
+// ── version comparison ───────────────────────────────────────────────────────
+
+describe('version comparison', () => {
+  test('reports an update when latest is greater than current', () => {
+    assert.equal(isNewerVersion('1.7.1', '1.7.0'), true);
+    assert.equal(isNewerVersion('1.8.0', '1.7.9'), true);
+    assert.equal(isNewerVersion('2.0.0', '1.99.99'), true);
+  });
+
+  test('does not report an update when latest equals current', () => {
+    assert.equal(isNewerVersion('1.7.0', '1.7.0'), false);
+  });
+
+  test('does not report an update when npm latest is behind local version', () => {
+    assert.equal(isNewerVersion('1.6.4', '1.7.0'), false);
+  });
+
+  test('handles version strings with prerelease suffixes conservatively', () => {
+    assert.equal(compareVersions('1.7.0-beta.1', '1.7.0'), -1);
+    assert.equal(compareVersions('1.7.0', '1.7.0-beta.1'), 1);
+    assert.equal(compareVersions('1.7.0-beta.2', '1.7.0-beta.1'), 1);
+  });
+});
+
+// ── ~/.claude path containment ───────────────────────────────────────────────
+
+describe('claude path containment', () => {
+  const home = path.resolve('/home/tester');
+  const base = path.join(home, '.claude');
+
+  test('allows files inside ~/.claude', () => {
+    const resolved = resolveClaudePath('~/.claude/settings.json', home);
+    assert.equal(isInBaseDir(base, resolved), true);
+  });
+
+  test('allows nested files inside ~/.claude', () => {
+    const resolved = path.join(base, 'skills', 'review', 'SKILL.md');
+    assert.equal(isInBaseDir(base, resolved), true);
+  });
+
+  test('blocks sibling paths that merely share the .claude prefix', () => {
+    const resolved = path.join(home, '.claude-backup', 'settings.json');
+    assert.equal(isInBaseDir(base, resolved), false);
+  });
+
+  test('blocks traversal outside ~/.claude', () => {
+    const resolved = resolveClaudePath('~/.claude/../.ssh/id_rsa', home);
+    assert.equal(isInBaseDir(base, resolved), false);
+  });
+
+  test('does not expand usernames such as ~other', () => {
+    const resolved = resolveClaudePath('~other/.claude/settings.json', home);
+    assert.equal(resolved.includes(home), false);
   });
 });
 
